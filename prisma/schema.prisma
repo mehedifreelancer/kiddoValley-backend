@@ -1,0 +1,159 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// Categories table
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  slug      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("categories")
+}
+
+// Products table
+model Product {
+  id       Int     @id @default(autoincrement())
+  barcode  String  @unique
+  name     String
+  slug     String  @unique
+  videoUrl String?
+
+  // Force order fields
+  isForceOrder       Boolean @default(false)
+  forceOrderPriority Int     @default(0)
+
+  // Category relation
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  // Price fields
+  buyingPrice     Float
+  sellingPrice    Float
+  hasDiscount     Boolean @default(false)
+  discountPercent Float?
+  stockQuantity   Int     @default(0)
+
+  // Relations
+  saleItems SaleItem[]
+
+  // Timestamps
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  productSuppliers ProductSupplier[]
+
+  @@unique([categoryId, slug])
+  @@index([barcode])
+  @@index([isForceOrder, forceOrderPriority])
+  @@map("products")
+}
+
+// Sales table (main transaction record)
+model Sale {
+  id            Int        @id @default(autoincrement())
+  invoiceNo     String     @unique
+  items         SaleItem[]
+  subtotal      Float // Sum of all items before tax/discount
+  tax           Float? // Tax amount if applicable
+  discount      Float? // Overall bill discount
+  total         Float // Final amount after all calculations
+  paymentMode   String? // Cash, Card, UPI, etc.
+  paymentStatus String     @default("paid") // paid, pending, refunded
+  customerName  String? // Optional customer name
+  customerPhone String? // Optional customer phone
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("sales")
+}
+
+// Sale Items table (individual items in each sale)
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+
+  // Snapshot of product details at time of sale
+  quantity        Int
+  buyingPrice     Float // Cost price at time of sale
+  sellingPrice    Float // Selling price at time of sale
+  discountPercent Float? // Discount applied to this item
+  finalPrice      Float // (sellingPrice - discount) * quantity
+
+  createdAt DateTime @default(now())
+
+  @@map("sale_items")
+}
+
+// Users/Employees table (for admin access)
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  password  String // Hashed password
+  name      String
+  role      String    @default("cashier") // admin, manager, cashier
+  isActive  Boolean   @default(true)
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("users")
+}
+
+// Suppliers table
+model Supplier {
+  id            Int               @id @default(autoincrement())
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  gstNumber     String?
+  paymentTerms  String? // e.g., "30 days"
+  products      ProductSupplier[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@map("suppliers")
+}
+
+// Product-Supplier junction table (many-to-many)
+model ProductSupplier {
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  supplierId Int
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  price      Float? // Special price from this supplier
+  isPrimary  Boolean  @default(false)
+
+  @@id([productId, supplierId])
+  @@map("product_suppliers")
+}
+
+// Store settings table
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  type      String   @default("string") // string, number, boolean, json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

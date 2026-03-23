@@ -1,10 +1,11 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
 import { prisma } from "./lib/prisma";
 
 // Import routes
-import categoryRoutes from "./routes/admin/categories";
-import productRoutes from "./routes/admin/products";
+import adminCategoryRoutes from "./routes/admin/categories";
+import adminProductRoutes from "./routes/admin/products";
+import publicCategoryRoutes from "./routes/public/categories";
 import publicProductRoutes from "./routes/public/products";
 
 // Import middleware
@@ -35,14 +36,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// Public routes
+// Public routes (no auth)
+app.use("/api/public/categories", publicCategoryRoutes);
 app.use("/api/public/products", publicProductRoutes);
 
 // Admin routes (protected)
-app.use("/api/admin/categories", adminAuth, categoryRoutes);
-app.use("/api/admin/products", adminAuth, productRoutes);
+app.use("/api/admin/categories", adminAuth, adminCategoryRoutes);
+app.use("/api/admin/products", adminAuth, adminProductRoutes);
 
-// Test route
+// Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({
     success: true,
@@ -50,6 +52,11 @@ app.get("/", (req: Request, res: Response) => {
     version: "1.0.0",
     endpoints: {
       public: {
+        categories: {
+          list: "GET /api/public/categories",
+          get: "GET /api/public/categories/:id",
+          getBySlug: "GET /api/public/categories/slug/:slug",
+        },
         products: {
           list: "GET /api/public/products?page=1&limit=10",
           byBarcode: "GET /api/public/products/barcode/:barcode",
@@ -60,8 +67,6 @@ app.get("/", (req: Request, res: Response) => {
       admin: {
         categories: {
           create: "POST /api/admin/categories",
-          list: "GET /api/admin/categories",
-          get: "GET /api/admin/categories/:id",
           update: "PUT /api/admin/categories/:id",
           delete: "DELETE /api/admin/categories/:id",
         },
@@ -91,26 +96,46 @@ app.get("/api/test-db", async (req: Request, res: Response) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`✅ Kiddo Valley API running at http://localhost:${PORT}`);
-  console.log(`📚 Public API: http://localhost:${PORT}/api/public/products`);
-  console.log(`🔧 Admin API: http://localhost:${PORT}/api/admin/categories`);
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.url} not found`
+  });
 });
 
-// export async function checkDatabaseConnection() {
-//   try {
-//     await prisma.$queryRaw`SELECT 1`;
-//     console.log("✅ Database connection successful");
-//     return true;
-//   } catch (error) {
-//     console.error("❌ Database connection failed:", error);
-//     return false;
-//   }
-// }
-// checkDatabaseConnection();
+// Global error handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({
+    success: false,
+    message: err.message || 'Internal server error'
+  });
+});
+
+// Start server with DB check
+async function startServer() {
+  try {
+    await prisma.$connect();
+    console.log('✅ Database connected successfully');
+    
+    app.listen(PORT, () => {
+      console.log(`✅ Kiddo Valley API running at http://localhost:${PORT}`);
+      console.log(`📚 Public Categories: http://localhost:${PORT}/api/public/categories`);
+      console.log(`📚 Public Products: http://localhost:${PORT}/api/public/products`);
+      console.log(`🔧 Admin API: http://localhost:${PORT}/api/admin`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to connect to database:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
+
 // Graceful shutdown
 process.on("SIGINT", async () => {
+  console.log('\n👋 Shutting down gracefully...');
   await prisma.$disconnect();
   process.exit(0);
 });

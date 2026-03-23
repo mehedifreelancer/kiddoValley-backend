@@ -1,6 +1,8 @@
 import express, { Request, Response, NextFunction } from "express";
 import dotenv from "dotenv";
+import swaggerUi from 'swagger-ui-express';
 import { prisma } from "./lib/prisma";
+import { swaggerSpec } from "./config/swagger";
 
 // Import routes
 import adminCategoryRoutes from "./routes/admin/categories";
@@ -20,6 +22,13 @@ const PORT = process.env.PORT || 4000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Swagger UI - Custom URL
+app.use('/kiddoValley-api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Kiddo Valley API Docs',
+}));
+
 // Manual CORS
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -36,48 +45,54 @@ app.use((req, res, next) => {
   next();
 });
 
-// Public routes (no auth)
-app.use("/api/public/categories", publicCategoryRoutes);
-app.use("/api/public/products", publicProductRoutes);
+// ==================== PUBLIC ROUTES ====================
+// No authentication required
+app.use("/api/public", publicCategoryRoutes);
+app.use("/api/public", publicProductRoutes);
 
-// Admin routes (protected)
-app.use("/api/admin/categories", adminAuth, adminCategoryRoutes);
-app.use("/api/admin/products", adminAuth, adminProductRoutes);
+// ==================== ADMIN ROUTES ====================
+// Require admin authentication
+app.use("/api/admin", adminAuth, adminCategoryRoutes);
+app.use("/api/admin", adminAuth, adminProductRoutes);
 
+// ==================== HEALTH & TEST ROUTES ====================
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({
     success: true,
     message: "Kiddo Valley API",
     version: "1.0.0",
+    docs: "http://localhost:4000/kiddoValley-api-docs",
     endpoints: {
       public: {
         categories: {
           list: "GET /api/public/categories",
-          get: "GET /api/public/categories/:id",
-          getBySlug: "GET /api/public/categories/slug/:slug",
+          getById: "GET /api/public/category/:id",
+          getBySlug: "GET /api/public/category/:slug",
         },
         products: {
           list: "GET /api/public/products?page=1&limit=10",
-          byBarcode: "GET /api/public/products/barcode/:barcode",
-          bySlug: "GET /api/public/products/:slug",
-          forceOrder: "GET /api/public/products/force-order/all",
+          getBySlug: "GET /api/public/product/:slug",
+          getByBarcode: "GET /api/public/product/barcode/:barcode",
+          forceOrder: "GET /api/public/products/force-order",
         },
       },
       admin: {
         categories: {
-          create: "POST /api/admin/categories",
-          update: "PUT /api/admin/categories/:id",
-          delete: "DELETE /api/admin/categories/:id",
+          create: "POST /api/admin/createCategory",
+          update: "PUT /api/admin/editCategory/:id",
+          delete: "DELETE /api/admin/deleteCategory/:id",
         },
         products: {
-          create: "POST /api/admin/products",
+          create: "POST /api/admin/createProduct",
           list: "GET /api/admin/products",
-          byBarcode: "GET /api/admin/products/barcode/:barcode",
-          update: "PUT /api/admin/products/:id",
-          delete: "DELETE /api/admin/products/:id",
+          getById: "GET /api/admin/product/:id",
+          getByBarcode: "GET /api/admin/product/barcode/:barcode",
+          update: "PUT /api/admin/editProduct/:id",
+          delete: "DELETE /api/admin/deleteProduct/:id",
         },
       },
+      docs: "GET /kiddoValley-api-docs",
     },
   });
 });
@@ -121,6 +136,7 @@ async function startServer() {
     
     app.listen(PORT, () => {
       console.log(`✅ Kiddo Valley API running at http://localhost:${PORT}`);
+      console.log(`📚 API Docs: http://localhost:${PORT}/kiddoValley-api-docs`);
       console.log(`📚 Public Categories: http://localhost:${PORT}/api/public/categories`);
       console.log(`📚 Public Products: http://localhost:${PORT}/api/public/products`);
       console.log(`🔧 Admin API: http://localhost:${PORT}/api/admin`);

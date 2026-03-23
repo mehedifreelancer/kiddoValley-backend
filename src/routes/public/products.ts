@@ -1,179 +1,100 @@
-import { Router } from "express";
-import { prisma } from "../../lib/prisma";
+import { Router } from 'express';
+import { productController } from '../../controllers/productController';
 
 const router = Router();
 
-// Get all products with pagination
-router.get("/", async (req, res) => {
-  try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
-    const category = req.query.category as string;
-    const search = req.query.search as string;
-    const forceOrder = req.query.forceOrder === "true";
+/**
+ * @swagger
+ * tags:
+ *   name: Public - Products
+ *   description: Public product endpoints (no authentication)
+ */
 
-    const skip = (page - 1) * limit;
+/**
+ * @swagger
+ * /api/public/products:
+ *   get:
+ *     summary: Get all products with pagination
+ *     tags: [Public - Products]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: forceOrder
+ *         schema:
+ *           type: boolean
+ *     responses:
+ *       200:
+ *         description: List of products with pagination
+ */
+router.get('/products', productController.getAllPublic);
 
-    // Build where clause
-    let where: any = {};
+/**
+ * @swagger
+ * /api/public/product/barcode/{barcode}:
+ *   get:
+ *     summary: Get product by barcode (for scanning)
+ *     tags: [Public - Products]
+ *     parameters:
+ *       - in: path
+ *         name: barcode
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Product details
+ *       404:
+ *         description: Product not found
+ */
+router.get('/product/barcode/:barcode', productController.getByBarcode);
 
-    if (category) {
-      where.category = {
-        slug: category,
-      };
-    }
+/**
+ * @swagger
+ * /api/public/product/{slug}:
+ *   get:
+ *     summary: Get product by slug
+ *     tags: [Public - Products]
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Product details
+ *       404:
+ *         description: Product not found
+ */
+router.get('/product/:slug', productController.getBySlug);
 
-    if (search) {
-      where.name = {
-        contains: search,
-      };
-    }
-
-    if (forceOrder) {
-      where.isForceOrder = true;
-    }
-
-    // Get products
-    const products = await prisma.product.findMany({
-      where,
-      skip,
-      take: limit,
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-      orderBy: forceOrder
-        ? { forceOrderPriority: "desc" }
-        : { createdAt: "desc" },
-    });
-
-    // Get total count for pagination
-    const total = await prisma.product.count({ where });
-
-    res.json({
-      success: true,
-      data: products,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Get product by barcode (for scanning)
-router.get("/barcode/:barcode", async (req, res) => {
-  try {
-    const { barcode } = req.params;
-
-    const product = await prisma.product.findUnique({
-      where: { barcode },
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: product,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Get product by slug
-router.get("/:slug", async (req, res) => {
-  try {
-    const { slug } = req.params;
-
-    const product = await prisma.product.findUnique({
-      where: { slug },
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: product,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Get force order products
-router.get("/force-order/all", async (req, res) => {
-  try {
-    const products = await prisma.product.findMany({
-      where: { isForceOrder: true },
-      orderBy: { forceOrderPriority: "desc" },
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
-
-    res.json({
-      success: true,
-      data: products,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
+/**
+ * @swagger
+ * /api/public/products/force-order:
+ *   get:
+ *     summary: Get all force order products
+ *     tags: [Public - Products]
+ *     responses:
+ *       200:
+ *         description: List of force order products
+ */
+router.get('/products/force-order', productController.getForceOrder);
 
 export default router;

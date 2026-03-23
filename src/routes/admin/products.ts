@@ -1,224 +1,109 @@
-import { Router } from "express";
-import { prisma } from "../../lib/prisma";
-import { generateSlug } from "../../utils/slugify";
+import { Router } from 'express';
+import { adminAuth } from '../../middleware/adminAuth';
+import { productController } from '../../controllers/productController';
 
 const router = Router();
 
-// Get all products
-router.get("/", async (req, res) => {
-  try {
-    const products = await prisma.product.findMany({
-      include: {
-        category: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+/**
+ * @swagger
+ * tags:
+ *   name: Admin - Products
+ *   description: Admin product management (requires x-admin-key header)
+ */
 
-    res.json({
-      success: true,
-      data: products,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
+/**
+ * @swagger
+ * /api/admin/createProduct:
+ *   post:
+ *     summary: Create a new product
+ *     tags: [Admin - Products]
+ *     security:
+ *       - AdminKey: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - barcode
+ *               - name
+ *               - categoryId
+ *               - buyingPrice
+ *               - sellingPrice
+ *             properties:
+ *               barcode:
+ *                 type: string
+ *                 example: "8901234567890"
+ *               name:
+ *                 type: string
+ *                 example: "Baby Diapers Large"
+ *               categoryId:
+ *                 type: integer
+ *                 example: 1
+ *               buyingPrice:
+ *                 type: number
+ *                 example: 450
+ *               sellingPrice:
+ *                 type: number
+ *                 example: 550
+ *     responses:
+ *       201:
+ *         description: Product created successfully
+ */
+router.post('/createProduct', adminAuth, productController.create);
 
-// Get product by ID
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+/**
+ * @swagger
+ * /api/admin/editProduct/{id}:
+ *   put:
+ *     summary: Update a product
+ *     tags: [Admin - Products]
+ *     security:
+ *       - AdminKey: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               sellingPrice:
+ *                 type: number
+ *               stockQuantity:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Product updated successfully
+ */
+router.put('/editProduct/:id', adminAuth, productController.update);
 
-    const product = await prisma.product.findUnique({
-      where: { id: Number(id) },
-      include: { category: true },
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: product,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Get product by barcode
-router.get("/barcode/:barcode", async (req, res) => {
-  try {
-    const { barcode } = req.params;
-
-    const product = await prisma.product.findUnique({
-      where: { barcode },
-      include: { category: true },
-    });
-
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: product,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Create product
-router.post("/", async (req, res) => {
-  try {
-    const {
-      barcode,
-      name,
-      categoryId,
-      buyingPrice,
-      sellingPrice,
-      videoUrl,
-      isForceOrder,
-      forceOrderPriority,
-      hasDiscount,
-      discountPercent,
-      stockQuantity,
-    } = req.body;
-
-    // Validation
-    if (!barcode || !name || !categoryId || !buyingPrice || !sellingPrice) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required fields",
-      });
-    }
-
-    // Check if barcode exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { barcode },
-    });
-
-    if (existingProduct) {
-      return res.status(400).json({
-        success: false,
-        message: "Product with this barcode already exists",
-      });
-    }
-
-    const slug = generateSlug(name);
-
-    const product = await prisma.product.create({
-      data: {
-        barcode,
-        name,
-        slug,
-        videoUrl,
-        isForceOrder: isForceOrder || false,
-        forceOrderPriority: forceOrderPriority || 0,
-        categoryId,
-        buyingPrice,
-        sellingPrice,
-        hasDiscount: hasDiscount || false,
-        discountPercent,
-        stockQuantity: stockQuantity || 0,
-      },
-      include: {
-        category: true,
-      },
-    });
-
-    res.status(201).json({
-      success: true,
-      data: product,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Update product
-router.put("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
-
-    // If name is updated, regenerate slug
-    if (updateData.name) {
-      updateData.slug = generateSlug(updateData.name);
-    }
-
-    const product = await prisma.product.update({
-      where: { id: Number(id) },
-      data: updateData,
-      include: { category: true },
-    });
-
-    res.json({
-      success: true,
-      data: product,
-    });
-  } catch (error: any) {
-    if (error.code === "P2025") {
-      res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: error.message,
-      });
-    }
-  }
-});
-
-// Delete product
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    await prisma.product.delete({
-      where: { id: Number(id) },
-    });
-
-    res.json({
-      success: true,
-      message: "Product deleted successfully",
-    });
-  } catch (error: any) {
-    if (error.code === "P2025") {
-      res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: error.message,
-      });
-    }
-  }
-});
+/**
+ * @swagger
+ * /api/admin/deleteProduct/{id}:
+ *   delete:
+ *     summary: Delete a product
+ *     tags: [Admin - Products]
+ *     security:
+ *       - AdminKey: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Product deleted successfully
+ */
+router.delete('/deleteProduct/:id', adminAuth, productController.delete);
 
 export default router;

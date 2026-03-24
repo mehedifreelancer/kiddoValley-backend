@@ -18,6 +18,6 @@
   "include": [
     "src/**/*",
     "generated/**/*" // Add generated folder
-, "generated", "generated", "generated", "generated"  ],
+, "generated", "generated", "generated", "generated", "generated", "generated", "generated"  ],
   "exclude": ["node_modules", "dist"]
 }

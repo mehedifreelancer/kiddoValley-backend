@@ -10,6 +10,7 @@ import adminProductRoutes from "./routes/admin/products";
 import publicCategoryRoutes from "./routes/public/categories";
 import publicProductRoutes from "./routes/public/products";
 import adminAuthRoutes from './routes/admin/auth';
+import adminBarcodeRoutes from './routes/admin/barcodes';  // ✅ Add this
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -56,7 +57,7 @@ app.use("/api/public", publicProductRoutes);
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use("/api/admin", adminAuth, adminCategoryRoutes);
 app.use("/api/admin", adminAuth, adminProductRoutes);
-
+app.use('/api/admin', adminAuth, adminBarcodeRoutes); 
 // ==================== HEALTH & TEST ROUTES ====================
 // Health check
 app.get("/", (req: Request, res: Response) => {

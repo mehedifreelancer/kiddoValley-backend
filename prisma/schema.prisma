@@ -33,6 +33,15 @@ model Category {
   @@map("categories")
 }
 
+model Barcode {
+  id         Int      @id @default(autoincrement())
+  title      String   // "Pop Up Book"
+  barcode    String   @unique  // Links to product.barcode
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("barcodes")
+}
 model Product {
   id                 Int               @id @default(autoincrement())
   barcode            String            @unique

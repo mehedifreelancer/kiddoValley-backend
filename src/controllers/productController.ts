@@ -329,11 +329,11 @@ export const productController = {
   // Get barcodes for dropdown
   async getBarcodesForDropdown(req: Request, res: Response) {
     try {
-      const products = await prisma.product.findMany({
+      const barcodes = await prisma.barcode.findMany({
         select: {
           id: true,
           barcode: true,
-          name: true
+          title: true
         },
         orderBy: {
           barcode: 'asc'
@@ -342,7 +342,7 @@ export const productController = {
 
       res.json({
         success: true,
-        data: products
+        data: barcodes
       });
     } catch (error: any) {
       console.error('Get barcodes error:', error);
@@ -353,18 +353,20 @@ export const productController = {
     }
   },
 
-  // Create product - validate first, then save images, then save to DB
+  // Create product with barcode
   async create(req: Request, res: Response) {
     let savedFilenames: string[] = [];
     
     try {
       const {
         barcode,
+        barcodeTitle,
         name,
         categoryId,
         buyingPrice,
         sellingPrice,
         videoUrl,
+        images: imageUrls,
         isForceOrder,
         forceOrderPriority,
         hasDiscount,
@@ -374,26 +376,25 @@ export const productController = {
 
       const files = req.files as Express.Multer.File[];
 
-      // ==================== VALIDATION PHASE ====================
-      // No images saved yet - all validation happens first
-
-      // 1. Validate images - at least one image required
-      if (!files || files.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'At least one product image is required'
-        });
-      }
-
-      // 2. Validate barcode
+      // ==================== VALIDATION ====================
+      
+      // Validate barcode
       if (!barcode || typeof barcode !== 'string' || barcode.trim() === '') {
         return res.status(400).json({
           success: false,
-          message: 'Valid barcode is required'
+          message: 'Barcode is required'
         });
       }
 
-      // 3. Validate name
+      // Validate barcode title
+      if (!barcodeTitle || typeof barcodeTitle !== 'string' || barcodeTitle.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'Barcode title is required'
+        });
+      }
+
+      // Validate name
       if (!name || typeof name !== 'string' || name.trim() === '') {
         return res.status(400).json({
           success: false,
@@ -415,7 +416,7 @@ export const productController = {
         });
       }
 
-      // 4. Validate category
+      // Validate category
       const categoryIdNum = parseInt(categoryId);
       if (isNaN(categoryIdNum)) {
         return res.status(400).json({
@@ -436,7 +437,7 @@ export const productController = {
         });
       }
 
-      // 5. Check if barcode exists
+      // Check if barcode already exists in product table
       const existingProduct = await prisma.product.findUnique({
         where: { barcode: barcode.trim() }
       });
@@ -448,9 +449,21 @@ export const productController = {
         });
       }
 
+      // Check if barcode already exists in barcode table
+      const existingBarcode = await prisma.barcode.findUnique({
+        where: { barcode: barcode.trim() }
+      });
+
+      if (existingBarcode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Barcode already exists'
+        });
+      }
+
       const slug = generateSlug(name);
 
-      // 6. Check if slug exists
+      // Check if slug exists
       const existingSlug = await prisma.product.findUnique({
         where: { slug }
       });
@@ -462,7 +475,7 @@ export const productController = {
         });
       }
 
-      // 7. Validate prices
+      // Validate prices
       const buyingPriceNum = parseFloat(buyingPrice);
       const sellingPriceNum = parseFloat(sellingPrice);
       
@@ -473,57 +486,82 @@ export const productController = {
         });
       }
 
-      // ==================== SAVE IMAGES PHASE ====================
-      // All validation passed, now save images to disk
-      savedFilenames = saveImagesToDisk(files);
+      // Validate images
+      if ((!files || files.length === 0) && (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0)) {
+        return res.status(400).json({
+          success: false,
+          message: 'At least one product image is required'
+        });
+      }
 
-      // Create image URLs
-      const images = savedFilenames.map(filename => ({
-        imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
-      }));
+      // ==================== SAVE IMAGES ====================
+      let finalImages: any[] = [];
 
-      // ==================== SAVE TO DATABASE PHASE ====================
-      const product = await prisma.product.create({
-        data: {
-          barcode: barcode.trim(),
-          name: name.trim(),
-          slug,
-          videoUrl: videoUrl || null,
-          images,
-          isForceOrder: isForceOrder === 'true' || isForceOrder === true,
-          forceOrderPriority: parseInt(forceOrderPriority) || 0,
-          categoryId: categoryIdNum,
-          buyingPrice: buyingPriceNum,
-          sellingPrice: sellingPriceNum,
-          hasDiscount: hasDiscount === 'true' || hasDiscount === true,
-          discountPercent: discountPercent ? parseFloat(discountPercent) : null,
-          stockQuantity: parseInt(stockQuantity) || 0,
-        },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
+      if (files && files.length > 0) {
+        savedFilenames = saveImagesToDisk(files);
+        finalImages = savedFilenames.map(filename => ({
+          imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
+        }));
+      } else if (imageUrls && Array.isArray(imageUrls)) {
+        finalImages = imageUrls;
+      }
+
+      // ==================== CREATE PRODUCT & BARCODE IN TRANSACTION ====================
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. Create product
+        const product = await tx.product.create({
+          data: {
+            barcode: barcode.trim(),
+            name: name.trim(),
+            slug,
+            videoUrl: videoUrl || null,
+            images: finalImages,
+            isForceOrder: isForceOrder === 'true' || isForceOrder === true,
+            forceOrderPriority: parseInt(forceOrderPriority) || 0,
+            categoryId: categoryIdNum,
+            buyingPrice: buyingPriceNum,
+            sellingPrice: sellingPriceNum,
+            hasDiscount: hasDiscount === 'true' || hasDiscount === true,
+            discountPercent: discountPercent ? parseFloat(discountPercent) : null,
+            stockQuantity: parseInt(stockQuantity) || 0,
+          },
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
+              }
             }
           }
-        }
+        });
+
+        // 2. Create barcode record
+        const barcodeRecord = await tx.barcode.create({
+          data: {
+            title: barcodeTitle.trim(),
+            barcode: product.barcode
+          }
+        });
+
+        return { product, barcodeRecord };
       });
 
       res.status(201).json({
         success: true,
-        data: product,
-        message: 'Product created successfully'
+        data: {
+          product: result.product,
+          barcode: result.barcodeRecord
+        },
+        message: 'Product and barcode created successfully'
       });
     } catch (error: any) {
-      // ==================== CLEANUP PHASE ====================
-      // If anything fails, delete any saved images
+      // Cleanup images on error
       if (savedFilenames.length > 0) {
         const imagePaths = savedFilenames.map(filename => 
           path.join(process.cwd(), 'public/uploads/product-images', filename)
         );
         deleteFiles(imagePaths);
-        console.log(`🧹 Cleaned up ${savedFilenames.length} orphaned image(s)`);
       }
       
       console.error('Create product error:', error);
@@ -534,10 +572,9 @@ export const productController = {
     }
   },
 
-  // Update product - validate first, then handle images
+  // Update product with barcode
   async update(req: Request, res: Response) {
     let savedFilenames: string[] = [];
-    let oldImagePaths: string[] = [];
     
     try {
       const id = parseInt(req.params.id);
@@ -562,16 +599,25 @@ export const productController = {
 
       const updateData: any = { ...req.body };
       const files = req.files as Express.Multer.File[];
+      const imageUrls = req.body.images;
 
-      // Store old image paths for potential cleanup
+      // Store old image paths for cleanup if replaced
       const oldImages = existingProduct.images as any[];
+      let oldImagePaths: string[] = [];
       if (oldImages && oldImages.length > 0) {
         oldImagePaths = getImagePathsFromProduct(oldImages);
       }
 
-      // ==================== VALIDATION PHASE ====================
+      // Extract barcode fields
+      const updateBarcode = updateData.barcode;
+      const updateBarcodeTitle = updateData.barcodeTitle;
       
-      // If name is updated, validate and regenerate slug
+      // Remove from product update data
+      delete updateData.barcodeTitle;
+
+      // ==================== VALIDATION ====================
+      
+      // If name is updated, regenerate slug
       if (updateData.name) {
         if (updateData.name.length < 2) {
           return res.status(400).json({
@@ -603,10 +649,10 @@ export const productController = {
       }
 
       // If barcode is updated, check for duplicates
-      if (updateData.barcode) {
+      if (updateBarcode) {
         const existingBarcode = await prisma.product.findFirst({
           where: {
-            barcode: updateData.barcode,
+            barcode: updateBarcode.trim(),
             id: { not: id }
           }
         });
@@ -619,70 +665,74 @@ export const productController = {
         }
       }
 
-      // ==================== SAVE NEW IMAGES PHASE ====================
-      // If new images are uploaded, save them first
+      // ==================== HANDLE IMAGES ====================
+      let finalImages: any[] = [];
+
       if (files && files.length > 0) {
+        // Save new images
         savedFilenames = saveImagesToDisk(files);
-        
-        // Create new image URLs
-        const newImages = savedFilenames.map(filename => ({
+        finalImages = savedFilenames.map(filename => ({
           imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
         }));
-        updateData.images = newImages;
+        updateData.images = finalImages;
+      } else if (imageUrls && Array.isArray(imageUrls)) {
+        updateData.images = imageUrls;
       }
 
-      // Parse numeric fields
-      if (updateData.categoryId) updateData.categoryId = parseInt(updateData.categoryId);
-      if (updateData.buyingPrice) updateData.buyingPrice = parseFloat(updateData.buyingPrice);
-      if (updateData.sellingPrice) updateData.sellingPrice = parseFloat(updateData.sellingPrice);
-      if (updateData.forceOrderPriority) updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
-      if (updateData.stockQuantity) updateData.stockQuantity = parseInt(updateData.stockQuantity);
-      if (updateData.discountPercent) updateData.discountPercent = parseFloat(updateData.discountPercent);
-      
-      // Convert boolean fields
-      if (updateData.isForceOrder !== undefined) {
-        updateData.isForceOrder = updateData.isForceOrder === 'true' || updateData.isForceOrder === true;
-      }
-      if (updateData.hasDiscount !== undefined) {
-        updateData.hasDiscount = updateData.hasDiscount === 'true' || updateData.hasDiscount === true;
-      }
-
-      // ==================== UPDATE DATABASE PHASE ====================
-      const product = await prisma.product.update({
-        where: { id },
-        data: updateData,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
+      // ==================== UPDATE PRODUCT & BARCODE IN TRANSACTION ====================
+      const result = await prisma.$transaction(async (tx) => {
+        // Update product
+        const product = await tx.product.update({
+          where: { id },
+          data: updateData,
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
+              }
             }
           }
+        });
+
+        // Update barcode if changed
+        if (updateBarcode || updateBarcodeTitle) {
+          const existingBarcodeRecord = await tx.barcode.findUnique({
+            where: { barcode: existingProduct.barcode }
+          });
+
+          if (existingBarcodeRecord) {
+            await tx.barcode.update({
+              where: { id: existingBarcodeRecord.id },
+              data: {
+                title: updateBarcodeTitle || existingBarcodeRecord.title,
+                barcode: updateBarcode || existingBarcodeRecord.barcode
+              }
+            });
+          }
         }
+
+        return product;
       });
 
-      // ==================== DELETE OLD IMAGES PHASE ====================
-      // Only delete old images if update was successful and new images were uploaded
+      // Delete old images if replaced
       if (savedFilenames.length > 0 && oldImagePaths.length > 0) {
-        const result = deleteFiles(oldImagePaths);
-        console.log(`✅ Deleted ${result.success} old image(s), failed: ${result.failed}`);
+        deleteFiles(oldImagePaths);
       }
 
       res.json({
         success: true,
-        data: product,
+        data: result,
         message: 'Product updated successfully'
       });
     } catch (error: any) {
-      // ==================== CLEANUP PHASE ====================
-      // If update fails, delete any newly saved images
+      // Cleanup new images on error
       if (savedFilenames.length > 0) {
         const newImagePaths = savedFilenames.map(filename => 
           path.join(process.cwd(), 'public/uploads/product-images', filename)
         );
         deleteFiles(newImagePaths);
-        console.log(`🧹 Cleaned up ${savedFilenames.length} new image(s) due to error`);
       }
       
       console.error('Update product error:', error);
@@ -693,7 +743,7 @@ export const productController = {
     }
   },
 
-  // Delete product with image files
+  // Delete product with barcode
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
@@ -705,11 +755,11 @@ export const productController = {
         });
       }
 
-      const existingProduct = await prisma.product.findUnique({
+      const product = await prisma.product.findUnique({
         where: { id }
       });
 
-      if (!existingProduct) {
+      if (!product) {
         return res.status(404).json({
           success: false,
           message: 'Product not found'
@@ -729,37 +779,34 @@ export const productController = {
         });
       }
 
-      // Get image paths and delete them from server
-      const images = existingProduct.images as any[];
-      let deletedImages = 0;
-      let failedImages = 0;
-
+      // Get image paths for cleanup
+      const images = product.images as any[];
+      let imagePaths: string[] = [];
       if (images && images.length > 0) {
-        const imagePaths = getImagePathsFromProduct(images);
-        const result = deleteFiles(imagePaths);
-        deletedImages = result.success;
-        failedImages = result.failed;
-        
-        if (deletedImages > 0) {
-          console.log(`✅ Deleted ${deletedImages} image(s) from server`);
-        }
-        if (failedImages > 0) {
-          console.log(`⚠️ Failed to delete ${failedImages} image(s)`);
-        }
+        imagePaths = getImagePathsFromProduct(images);
       }
 
-      // Delete product from database
-      await prisma.product.delete({
-        where: { id }
+      // Delete product and barcode in transaction
+      await prisma.$transaction(async (tx) => {
+        // Delete product
+        await tx.product.delete({
+          where: { id }
+        });
+
+        // Delete associated barcode
+        await tx.barcode.deleteMany({
+          where: { barcode: product.barcode }
+        });
       });
+
+      // Delete images from disk
+      if (imagePaths.length > 0) {
+        deleteFiles(imagePaths);
+      }
 
       res.json({
         success: true,
-        message: 'Product deleted successfully',
-        meta: {
-          deletedImages,
-          failedImages
-        }
+        message: 'Product and barcode deleted successfully'
       });
     } catch (error: any) {
       console.error('Delete product error:', error);

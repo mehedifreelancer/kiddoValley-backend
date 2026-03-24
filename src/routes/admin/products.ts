@@ -4,6 +4,7 @@ import { adminAuth } from '../../middleware/adminAuth';
 import { uploadProductImages } from '../../multer';
 
 const router = Router();
+
 /**
  * @swagger
  * tags:
@@ -13,7 +14,7 @@ const router = Router();
 
 /**
  * @swagger
- * /api/admin/products:
+ * /api/admin/products/getAll:
  *   get:
  *     summary: Get all products (admin view)
  *     tags: [Admin - Products]
@@ -49,11 +50,11 @@ const router = Router();
  *       200:
  *         description: List of products with pagination
  */
-router.get('/products', adminAuth, productController.getAllAdmin);
+router.get('/getAll', adminAuth, productController.getAllAdmin);
 
 /**
  * @swagger
- * /api/admin/product/{id}:
+ * /api/admin/products/getById/{id}:
  *   get:
  *     summary: Get product by ID
  *     tags: [Admin - Products]
@@ -71,11 +72,11 @@ router.get('/products', adminAuth, productController.getAllAdmin);
  *       404:
  *         description: Product not found
  */
-router.get('/product/:id', adminAuth, productController.getById);
+router.get('/getById/:id', adminAuth, productController.getById);
 
 /**
  * @swagger
- * /api/admin/product/barcode/{barcode}:
+ * /api/admin/products/getByBarcode/{barcode}:
  *   get:
  *     summary: Get product by barcode
  *     tags: [Admin - Products]
@@ -93,13 +94,13 @@ router.get('/product/:id', adminAuth, productController.getById);
  *       404:
  *         description: Product not found
  */
-router.get('/product/barcode/:barcode', adminAuth, productController.getByBarcode);
+router.get('/getByBarcode/:barcode', adminAuth, productController.getByBarcode);
 
 /**
  * @swagger
- * /api/admin/createProduct:
+ * /api/admin/products/create:
  *   post:
- *     summary: Create a new product with images
+ *     summary: Create a new product with barcode
  *     tags: [Admin - Products]
  *     security:
  *       - BearerAuth: []
@@ -111,6 +112,7 @@ router.get('/product/barcode/:barcode', adminAuth, productController.getByBarcod
  *             type: object
  *             required:
  *               - barcode
+ *               - barcodeTitle
  *               - name
  *               - categoryId
  *               - buyingPrice
@@ -119,58 +121,50 @@ router.get('/product/barcode/:barcode', adminAuth, productController.getByBarcod
  *             properties:
  *               barcode:
  *                 type: string
- *                 example: "8901234567890"
+ *                 example: "BAR1234567890"
+ *               barcodeTitle:
+ *                 type: string
+ *                 example: "Pop Up Book"
  *               name:
  *                 type: string
- *                 example: "Baby Diapers Large"
+ *                 example: "Baby Pop Up Book"
  *               categoryId:
  *                 type: integer
  *                 example: 1
  *               buyingPrice:
  *                 type: number
- *                 example: 450
+ *                 example: 200
  *               sellingPrice:
  *                 type: number
- *                 example: 550
+ *                 example: 350
  *               images:
  *                 type: array
  *                 items:
  *                   type: string
  *                   format: binary
- *                 description: Product images (at least one)
  *               videoUrl:
  *                 type: string
- *                 example: "https://youtube.com/watch?v=123"
  *               isForceOrder:
  *                 type: boolean
- *                 default: false
  *               forceOrderPriority:
  *                 type: integer
- *                 default: 0
  *               hasDiscount:
  *                 type: boolean
- *                 default: false
  *               discountPercent:
  *                 type: number
  *               stockQuantity:
  *                 type: integer
- *                 default: 0
  *     responses:
  *       201:
- *         description: Product created successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin privileges required
+ *         description: Product and barcode created successfully
  */
-router.post('/createProduct', adminAuth, uploadProductImages, productController.create);
+router.post('/create', adminAuth, uploadProductImages, productController.create);
+
 /**
  * @swagger
- * /api/admin/editProduct/{id}:
+ * /api/admin/products/edit/{id}:
  *   put:
- *     summary: Update a product (with optional image upload)
+ *     summary: Update a product and its barcode
  *     tags: [Admin - Products]
  *     security:
  *       - BearerAuth: []
@@ -187,48 +181,36 @@ router.post('/createProduct', adminAuth, uploadProductImages, productController.
  *           schema:
  *             type: object
  *             properties:
+ *               barcode:
+ *                 type: string
+ *               barcodeTitle:
+ *                 type: string
  *               name:
  *                 type: string
- *                 example: "Updated Product Name"
  *               sellingPrice:
  *                 type: number
- *                 example: 600
  *               images:
  *                 type: array
  *                 items:
  *                   type: string
  *                   format: binary
- *                 description: New images (replaces existing)
  *               stockQuantity:
  *                 type: integer
- *                 example: 150
  *               isForceOrder:
  *                 type: boolean
  *               forceOrderPriority:
  *                 type: integer
- *               hasDiscount:
- *                 type: boolean
- *               discountPercent:
- *                 type: number
  *     responses:
  *       200:
  *         description: Product updated successfully
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin privileges required
- *       404:
- *         description: Product not found
  */
-router.put('/editProduct/:id', adminAuth, uploadProductImages, productController.update);
+router.put('/edit/:id', adminAuth, uploadProductImages, productController.update);
 
 /**
  * @swagger
- * /api/admin/deleteProduct/{id}:
+ * /api/admin/products/delete/{id}:
  *   delete:
- *     summary: Delete a product
+ *     summary: Delete a product and its barcode
  *     tags: [Admin - Products]
  *     security:
  *       - BearerAuth: []
@@ -240,16 +222,8 @@ router.put('/editProduct/:id', adminAuth, uploadProductImages, productController
  *           type: integer
  *     responses:
  *       200:
- *         description: Product deleted successfully
- *       400:
- *         description: Cannot delete product with sales records
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Admin privileges required
- *       404:
- *         description: Product not found
+ *         description: Product and barcode deleted successfully
  */
-router.delete('/deleteProduct/:id', adminAuth, productController.delete);
+router.delete('/delete/:id', adminAuth, productController.delete);
 
 export default router;

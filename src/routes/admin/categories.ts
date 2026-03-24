@@ -8,7 +8,7 @@ const router = Router();
  * @swagger
  * tags:
  *   name: Admin - Categories
- *   description: Admin category management (requires x-admin-key header)
+ *   description: Admin category management (requires Bearer token)
  */
 
 /**
@@ -18,22 +18,33 @@ const router = Router();
  *     summary: Create a new category
  *     tags: [Admin - Categories]
  *     security:
- *       - AdminKey: []
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *                 example: "Baby Products"
+ *             $ref: '#/components/schemas/CreateCategoryDto'
  *     responses:
  *       201:
  *         description: Category created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Category'
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid input or category already exists
+ *       401:
+ *         description: Unauthorized - No token provided
+ *       403:
+ *         description: Forbidden - Admin privileges required
  */
 router.post('/createCategory', adminAuth, categoryController.create);
 
@@ -44,28 +55,29 @@ router.post('/createCategory', adminAuth, categoryController.create);
  *     summary: Update a category
  *     tags: [Admin - Categories]
  *     security:
- *       - AdminKey: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
+ *         description: Category ID
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - name
- *             properties:
- *               name:
- *                 type: string
- *                 example: "Premium Baby Products"
+ *             $ref: '#/components/schemas/UpdateCategoryDto'
  *     responses:
  *       200:
  *         description: Category updated successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin privileges required
+ *       404:
+ *         description: Category not found
  */
 router.put('/editCategory/:id', adminAuth, categoryController.update);
 
@@ -76,16 +88,25 @@ router.put('/editCategory/:id', adminAuth, categoryController.update);
  *     summary: Delete a category
  *     tags: [Admin - Categories]
  *     security:
- *       - AdminKey: []
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
+ *         description: Category ID
  *     responses:
  *       200:
  *         description: Category deleted successfully
+ *       400:
+ *         description: Cannot delete category with products
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - Admin privileges required
+ *       404:
+ *         description: Category not found
  */
 router.delete('/deleteCategory/:id', adminAuth, categoryController.delete);
 

@@ -9,6 +9,7 @@ import adminCategoryRoutes from "./routes/admin/categories";
 import adminProductRoutes from "./routes/admin/products";
 import publicCategoryRoutes from "./routes/public/categories";
 import publicProductRoutes from "./routes/public/products";
+import adminAuthRoutes from './routes/admin/auth';
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -52,6 +53,7 @@ app.use("/api/public", publicProductRoutes);
 
 // ==================== ADMIN ROUTES ====================
 // Require admin authentication
+app.use('/api/admin/auth', adminAuthRoutes);
 app.use("/api/admin", adminAuth, adminCategoryRoutes);
 app.use("/api/admin", adminAuth, adminProductRoutes);
 

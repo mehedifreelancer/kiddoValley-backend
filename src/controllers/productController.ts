@@ -1,23 +1,34 @@
 import { Request, Response } from 'express';
+import path from 'path';
 import { generateSlug } from '../utils/slugify';
 import { prisma } from '../lib/prisma';
+import { deleteFiles, getImagePathsFromProduct } from '../utils/fileUtils';
+import { saveImagesToDisk } from '../multer';
 
 export const productController = {
-  // Get all products (public with pagination)
+  // Get all products (public with pagination and search)
   async getAllPublic(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
-      const search = req.query.search as string;
+      const search = req.query.search as string | string[];
       const category = req.query.category as string;
       const forceOrder = req.query.forceOrder === 'true';
       
       const skip = (page - 1) * limit;
       
       let where: any = {};
+      
       if (search) {
-        where.name = { contains: search };
+        const searchTerms = Array.isArray(search) ? search : [search];
+        where.AND = searchTerms.map(term => ({
+          OR: [
+            { name: { contains: term } },
+            { barcode: { contains: term } }
+          ]
+        }));
       }
+      
       if (category) {
         where.category = { slug: category };
       }
@@ -25,25 +36,26 @@ export const productController = {
         where.isForceOrder = true;
       }
       
-      const products = await prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
+              }
             }
-          }
-        },
-        orderBy: forceOrder 
-          ? { forceOrderPriority: 'desc' }
-          : { createdAt: 'desc' }
-      });
-      
-      const total = await prisma.product.count({ where });
+          },
+          orderBy: forceOrder 
+            ? { forceOrderPriority: 'desc' }
+            : { createdAt: 'desc' }
+        }),
+        prisma.product.count({ where })
+      ]);
       
       res.json({
         success: true,
@@ -64,27 +76,68 @@ export const productController = {
     }
   },
 
-  // Get all products (admin - full access)
+  // Get all products (admin - full access with search)
   async getAllAdmin(req: Request, res: Response) {
     try {
-      const products = await prisma.product.findMany({
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const search = req.query.search as string | string[];
+      const categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined;
+      const forceOrder = req.query.forceOrder === 'true';
+      
+      const skip = (page - 1) * limit;
+      
+      let where: any = {};
+      
+      if (search) {
+        const searchTerms = Array.isArray(search) ? search : [search];
+        where.AND = searchTerms.map(term => ({
+          OR: [
+            { name: { contains: term } },
+            { barcode: { contains: term } },
+            { slug: { contains: term } }
+          ]
+        }));
+      }
+      
+      if (categoryId) {
+        where.categoryId = categoryId;
+      }
+      
+      if (forceOrder) {
+        where.isForceOrder = true;
+      }
+      
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true
+              }
             }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      });
-
+          },
+          orderBy: forceOrder 
+            ? { forceOrderPriority: 'desc' }
+            : { createdAt: 'desc' }
+        }),
+        prisma.product.count({ where })
+      ]);
+      
       res.json({
         success: true,
-        data: products
+        data: products,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
       });
     } catch (error: any) {
       console.error('Get all products admin error:', error);
@@ -246,8 +299,64 @@ export const productController = {
     }
   },
 
-  // Create product
+  // Get categories for dropdown
+  async getCategoriesForDropdown(req: Request, res: Response) {
+    try {
+      const categories = await prisma.category.findMany({
+        select: {
+          id: true,
+          name: true,
+          slug: true
+        },
+        orderBy: {
+          name: 'asc'
+        }
+      });
+
+      res.json({
+        success: true,
+        data: categories
+      });
+    } catch (error: any) {
+      console.error('Get categories error:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch categories'
+      });
+    }
+  },
+
+  // Get barcodes for dropdown
+  async getBarcodesForDropdown(req: Request, res: Response) {
+    try {
+      const products = await prisma.product.findMany({
+        select: {
+          id: true,
+          barcode: true,
+          name: true
+        },
+        orderBy: {
+          barcode: 'asc'
+        }
+      });
+
+      res.json({
+        success: true,
+        data: products
+      });
+    } catch (error: any) {
+      console.error('Get barcodes error:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch barcodes'
+      });
+    }
+  },
+
+  // Create product - validate first, then save images, then save to DB
   async create(req: Request, res: Response) {
+    let savedFilenames: string[] = [];
+    
     try {
       const {
         barcode,
@@ -263,22 +372,29 @@ export const productController = {
         stockQuantity,
       } = req.body;
 
-      // Validation
-      if (!barcode || !name || !categoryId || !buyingPrice || !sellingPrice) {
+      const files = req.files as Express.Multer.File[];
+
+      // ==================== VALIDATION PHASE ====================
+      // No images saved yet - all validation happens first
+
+      // 1. Validate images - at least one image required
+      if (!files || files.length === 0) {
         return res.status(400).json({
           success: false,
-          message: 'Missing required fields: barcode, name, categoryId, buyingPrice, sellingPrice'
+          message: 'At least one product image is required'
         });
       }
 
-      if (typeof barcode !== 'string' || barcode.trim() === '') {
+      // 2. Validate barcode
+      if (!barcode || typeof barcode !== 'string' || barcode.trim() === '') {
         return res.status(400).json({
           success: false,
           message: 'Valid barcode is required'
         });
       }
 
-      if (typeof name !== 'string' || name.trim() === '') {
+      // 3. Validate name
+      if (!name || typeof name !== 'string' || name.trim() === '') {
         return res.status(400).json({
           success: false,
           message: 'Product name is required'
@@ -299,7 +415,9 @@ export const productController = {
         });
       }
 
-      if (isNaN(categoryId)) {
+      // 4. Validate category
+      const categoryIdNum = parseInt(categoryId);
+      if (isNaN(categoryIdNum)) {
         return res.status(400).json({
           success: false,
           message: 'Valid category ID is required'
@@ -308,7 +426,7 @@ export const productController = {
 
       // Check if category exists
       const category = await prisma.category.findUnique({
-        where: { id: categoryId }
+        where: { id: categoryIdNum }
       });
 
       if (!category) {
@@ -318,9 +436,9 @@ export const productController = {
         });
       }
 
-      // Check if barcode exists
+      // 5. Check if barcode exists
       const existingProduct = await prisma.product.findUnique({
-        where: { barcode }
+        where: { barcode: barcode.trim() }
       });
 
       if (existingProduct) {
@@ -332,7 +450,7 @@ export const productController = {
 
       const slug = generateSlug(name);
 
-      // Check if slug exists
+      // 6. Check if slug exists
       const existingSlug = await prisma.product.findUnique({
         where: { slug }
       });
@@ -344,20 +462,42 @@ export const productController = {
         });
       }
 
+      // 7. Validate prices
+      const buyingPriceNum = parseFloat(buyingPrice);
+      const sellingPriceNum = parseFloat(sellingPrice);
+      
+      if (isNaN(buyingPriceNum) || isNaN(sellingPriceNum)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid buying price and selling price are required'
+        });
+      }
+
+      // ==================== SAVE IMAGES PHASE ====================
+      // All validation passed, now save images to disk
+      savedFilenames = saveImagesToDisk(files);
+
+      // Create image URLs
+      const images = savedFilenames.map(filename => ({
+        imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
+      }));
+
+      // ==================== SAVE TO DATABASE PHASE ====================
       const product = await prisma.product.create({
         data: {
           barcode: barcode.trim(),
           name: name.trim(),
           slug,
           videoUrl: videoUrl || null,
-          isForceOrder: isForceOrder || false,
-          forceOrderPriority: forceOrderPriority || 0,
-          categoryId,
-          buyingPrice,
-          sellingPrice,
-          hasDiscount: hasDiscount || false,
-          discountPercent: discountPercent || null,
-          stockQuantity: stockQuantity || 0,
+          images,
+          isForceOrder: isForceOrder === 'true' || isForceOrder === true,
+          forceOrderPriority: parseInt(forceOrderPriority) || 0,
+          categoryId: categoryIdNum,
+          buyingPrice: buyingPriceNum,
+          sellingPrice: sellingPriceNum,
+          hasDiscount: hasDiscount === 'true' || hasDiscount === true,
+          discountPercent: discountPercent ? parseFloat(discountPercent) : null,
+          stockQuantity: parseInt(stockQuantity) || 0,
         },
         include: {
           category: {
@@ -376,6 +516,16 @@ export const productController = {
         message: 'Product created successfully'
       });
     } catch (error: any) {
+      // ==================== CLEANUP PHASE ====================
+      // If anything fails, delete any saved images
+      if (savedFilenames.length > 0) {
+        const imagePaths = savedFilenames.map(filename => 
+          path.join(process.cwd(), 'public/uploads/product-images', filename)
+        );
+        deleteFiles(imagePaths);
+        console.log(`🧹 Cleaned up ${savedFilenames.length} orphaned image(s)`);
+      }
+      
       console.error('Create product error:', error);
       res.status(500).json({
         success: false,
@@ -384,12 +534,14 @@ export const productController = {
     }
   },
 
-  // Update product
+  // Update product - validate first, then handle images
   async update(req: Request, res: Response) {
+    let savedFilenames: string[] = [];
+    let oldImagePaths: string[] = [];
+    
     try {
       const id = parseInt(req.params.id);
-      const updateData = req.body;
-
+      
       if (isNaN(id)) {
         return res.status(400).json({
           success: false,
@@ -408,7 +560,18 @@ export const productController = {
         });
       }
 
-      // If name is updated, regenerate slug
+      const updateData: any = { ...req.body };
+      const files = req.files as Express.Multer.File[];
+
+      // Store old image paths for potential cleanup
+      const oldImages = existingProduct.images as any[];
+      if (oldImages && oldImages.length > 0) {
+        oldImagePaths = getImagePathsFromProduct(oldImages);
+      }
+
+      // ==================== VALIDATION PHASE ====================
+      
+      // If name is updated, validate and regenerate slug
       if (updateData.name) {
         if (updateData.name.length < 2) {
           return res.status(400).json({
@@ -416,9 +579,14 @@ export const productController = {
             message: 'Product name must be at least 2 characters'
           });
         }
+        if (updateData.name.length > 100) {
+          return res.status(400).json({
+            success: false,
+            message: 'Product name must be less than 100 characters'
+          });
+        }
         updateData.slug = generateSlug(updateData.name);
         
-        // Check if new slug conflicts with another product
         const existingSlug = await prisma.product.findFirst({
           where: {
             slug: updateData.slug,
@@ -451,6 +619,35 @@ export const productController = {
         }
       }
 
+      // ==================== SAVE NEW IMAGES PHASE ====================
+      // If new images are uploaded, save them first
+      if (files && files.length > 0) {
+        savedFilenames = saveImagesToDisk(files);
+        
+        // Create new image URLs
+        const newImages = savedFilenames.map(filename => ({
+          imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
+        }));
+        updateData.images = newImages;
+      }
+
+      // Parse numeric fields
+      if (updateData.categoryId) updateData.categoryId = parseInt(updateData.categoryId);
+      if (updateData.buyingPrice) updateData.buyingPrice = parseFloat(updateData.buyingPrice);
+      if (updateData.sellingPrice) updateData.sellingPrice = parseFloat(updateData.sellingPrice);
+      if (updateData.forceOrderPriority) updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
+      if (updateData.stockQuantity) updateData.stockQuantity = parseInt(updateData.stockQuantity);
+      if (updateData.discountPercent) updateData.discountPercent = parseFloat(updateData.discountPercent);
+      
+      // Convert boolean fields
+      if (updateData.isForceOrder !== undefined) {
+        updateData.isForceOrder = updateData.isForceOrder === 'true' || updateData.isForceOrder === true;
+      }
+      if (updateData.hasDiscount !== undefined) {
+        updateData.hasDiscount = updateData.hasDiscount === 'true' || updateData.hasDiscount === true;
+      }
+
+      // ==================== UPDATE DATABASE PHASE ====================
       const product = await prisma.product.update({
         where: { id },
         data: updateData,
@@ -465,12 +662,29 @@ export const productController = {
         }
       });
 
+      // ==================== DELETE OLD IMAGES PHASE ====================
+      // Only delete old images if update was successful and new images were uploaded
+      if (savedFilenames.length > 0 && oldImagePaths.length > 0) {
+        const result = deleteFiles(oldImagePaths);
+        console.log(`✅ Deleted ${result.success} old image(s), failed: ${result.failed}`);
+      }
+
       res.json({
         success: true,
         data: product,
         message: 'Product updated successfully'
       });
     } catch (error: any) {
+      // ==================== CLEANUP PHASE ====================
+      // If update fails, delete any newly saved images
+      if (savedFilenames.length > 0) {
+        const newImagePaths = savedFilenames.map(filename => 
+          path.join(process.cwd(), 'public/uploads/product-images', filename)
+        );
+        deleteFiles(newImagePaths);
+        console.log(`🧹 Cleaned up ${savedFilenames.length} new image(s) due to error`);
+      }
+      
       console.error('Update product error:', error);
       res.status(500).json({
         success: false,
@@ -479,7 +693,7 @@ export const productController = {
     }
   },
 
-  // Delete product
+  // Delete product with image files
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
@@ -515,13 +729,37 @@ export const productController = {
         });
       }
 
+      // Get image paths and delete them from server
+      const images = existingProduct.images as any[];
+      let deletedImages = 0;
+      let failedImages = 0;
+
+      if (images && images.length > 0) {
+        const imagePaths = getImagePathsFromProduct(images);
+        const result = deleteFiles(imagePaths);
+        deletedImages = result.success;
+        failedImages = result.failed;
+        
+        if (deletedImages > 0) {
+          console.log(`✅ Deleted ${deletedImages} image(s) from server`);
+        }
+        if (failedImages > 0) {
+          console.log(`⚠️ Failed to delete ${failedImages} image(s)`);
+        }
+      }
+
+      // Delete product from database
       await prisma.product.delete({
         where: { id }
       });
 
       res.json({
         success: true,
-        message: 'Product deleted successfully'
+        message: 'Product deleted successfully',
+        meta: {
+          deletedImages,
+          failedImages
+        }
       });
     } catch (error: any) {
       console.error('Delete product error:', error);

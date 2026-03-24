@@ -1,35 +1,57 @@
 {
-  "name": "simple-express-ts",
+  "name": "kiddovalley-backend",
   "version": "1.0.0",
-  "description": "Simple Express app with TypeScript",
+  "description": "Kiddo Valley Supermarket POS System Backend",
   "main": "dist/index.js",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "studio": "prisma studio",
+    "generate": "prisma generate",
+    "seed": "prisma db seed",
+    "reset": "prisma migrate reset"
   },
-  "keywords": [],
+  "keywords": [
+    "pos",
+    "supermarket",
+    "barcode",
+    "kiddo-valley"
+  ],
   "author": "",
   "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.4.2",
-    "@prisma/client": "^7.4.2",
+    "@prisma/client": "^7.5.0",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^17.3.1",
     "express": "^4.22.1",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/express": "^4.17.25",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
     "@types/node": "^20.19.37",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.14",
     "prisma": "^7.4.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
-  },
-  "type": "commonjs"
+  }
 }

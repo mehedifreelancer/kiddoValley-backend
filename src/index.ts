@@ -56,7 +56,7 @@ app.use("/api/public", publicProductRoutes);
 // Require admin authentication
 app.use('/api/admin/auth', adminAuthRoutes);
 app.use("/api/admin", adminAuth, adminCategoryRoutes);
-app.use("/api/admin", adminAuth, adminProductRoutes);
+app.use("/api/admin/products", adminAuth, adminProductRoutes);
 app.use('/api/admin', adminAuth, adminBarcodeRoutes); 
 // ==================== HEALTH & TEST ROUTES ====================
 // Health check

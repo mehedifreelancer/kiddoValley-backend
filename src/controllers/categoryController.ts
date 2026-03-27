@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import { generateSlug } from '../utils/slugify';
 import { prisma } from '../lib/prisma';
 
-
-
 export const categoryController = {
   // Get all categories
   async getAll(req: Request, res: Response) {
@@ -63,7 +61,7 @@ export const categoryController = {
               barcode: true,
               sellingPrice: true,
               isForceOrder: true,
-              stockQuantity: true
+              // ✅ Removed stockQuantity - doesn't exist in Product model
             }
           }
         }

@@ -42,13 +42,15 @@ model Barcode {
 
   @@map("barcodes")
 }
+
 model Product {
   id                 Int               @id @default(autoincrement())
   barcode            String            @unique
   name               String
   slug               String            @unique
   videoUrl           String?
-  images             Json // Required - at least one image
+  images             Json
+  description        String?           // ✅ Add this for rich text editor
   isForceOrder       Boolean           @default(false)
   forceOrderPriority Int               @default(0)
   categoryId         Int
@@ -57,9 +59,8 @@ model Product {
   sellingPrice       Float
   hasDiscount        Boolean           @default(false)
   discountPercent    Float?
-  stockQuantity      Int               @default(0)
   saleItems          SaleItem[]
-  suppliers          ProductSupplier[] // ✅ Add this relation
+  suppliers          ProductSupplier[]
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 

@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { categoryController } from '../../controllers/categoryController';
+import { Router } from "express";
+import { categoryController } from "../../controllers/categoryController";
 
 const router = Router();
 
@@ -20,7 +20,7 @@ const router = Router();
  *       200:
  *         description: List of categories
  */
-router.get('/categories', categoryController.getAll);
+router.get("/categories", categoryController.getAll);
 
 /**
  * @swagger
@@ -40,7 +40,7 @@ router.get('/categories', categoryController.getAll);
  *       404:
  *         description: Category not found
  */
-router.get('/category/:id', categoryController.getById);
+router.get("/category/:id", categoryController.getById);
 
 /**
  * @swagger
@@ -60,6 +60,6 @@ router.get('/category/:id', categoryController.getById);
  *       404:
  *         description: Category not found
  */
-router.get('/category/:slug', categoryController.getBySlug);
+router.get("/category/:slug", categoryController.getBySlug);
 
 export default router;

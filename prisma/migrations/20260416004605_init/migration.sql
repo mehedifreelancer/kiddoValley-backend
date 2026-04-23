@@ -49,6 +49,7 @@ CREATE TABLE `products` (
     `slug` VARCHAR(191) NOT NULL,
     `videoUrl` VARCHAR(191) NULL,
     `images` JSON NOT NULL,
+    `description` VARCHAR(191) NULL,
     `isForceOrder` BOOLEAN NOT NULL DEFAULT false,
     `forceOrderPriority` INTEGER NOT NULL DEFAULT 0,
     `categoryId` INTEGER NOT NULL,
@@ -56,7 +57,6 @@ CREATE TABLE `products` (
     `sellingPrice` DOUBLE NOT NULL,
     `hasDiscount` BOOLEAN NOT NULL DEFAULT false,
     `discountPercent` DOUBLE NULL,
-    `stockQuantity` INTEGER NOT NULL DEFAULT 0,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 

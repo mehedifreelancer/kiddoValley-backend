@@ -26,7 +26,7 @@ const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
   "http://127.0.0.1:3000",
-  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
   "http://localhost:4000",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
@@ -65,6 +65,7 @@ app.options("*", cors(corsOptions));
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static("public/uploads"));
 
 // Swagger UI
 app.use(

@@ -1,9 +1,9 @@
-import { Request, Response } from 'express';
-import path from 'path';
-import { generateSlug } from '../utils/slugify';
-import { prisma } from '../lib/prisma';
-import { deleteFiles, getImagePathsFromProduct } from '../utils/fileUtils';
-import { saveImagesToDisk } from '../multer';
+import { Request, Response } from "express";
+import path from "path";
+import { generateSlug } from "../utils/slugify";
+import { prisma } from "../lib/prisma";
+import { deleteFiles, getImagePathsFromProduct } from "../utils/fileUtils";
+import { saveImagesToDisk } from "../multer";
 
 export const productController = {
   // Get all products (public with pagination and search)
@@ -13,29 +13,26 @@ export const productController = {
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string | string[];
       const category = req.query.category as string;
-      const forceOrder = req.query.forceOrder === 'true';
-      
+      const forceOrder = req.query.forceOrder === "true";
+
       const skip = (page - 1) * limit;
-      
+
       let where: any = {};
-      
+
       if (search) {
         const searchTerms = Array.isArray(search) ? search : [search];
-        where.AND = searchTerms.map(term => ({
-          OR: [
-            { name: { contains: term } },
-            { barcode: { contains: term } }
-          ]
+        where.AND = searchTerms.map((term) => ({
+          OR: [{ name: { contains: term } }, { barcode: { contains: term } }],
         }));
       }
-      
+
       if (category) {
         where.category = { slug: category };
       }
       if (forceOrder) {
         where.isForceOrder = true;
       }
-      
+
       const [products, total] = await Promise.all([
         prisma.product.findMany({
           where,
@@ -46,17 +43,17 @@ export const productController = {
               select: {
                 id: true,
                 name: true,
-                slug: true
-              }
-            }
+                slug: true,
+              },
+            },
           },
-          orderBy: forceOrder 
-            ? { forceOrderPriority: 'desc' }
-            : { createdAt: 'desc' }
+          orderBy: forceOrder
+            ? { forceOrderPriority: "desc" }
+            : { createdAt: "desc" },
         }),
-        prisma.product.count({ where })
+        prisma.product.count({ where }),
       ]);
-      
+
       res.json({
         success: true,
         data: products,
@@ -64,14 +61,14 @@ export const productController = {
           page,
           limit,
           total,
-          pages: Math.ceil(total / limit)
-        }
+          pages: Math.ceil(total / limit),
+        },
       });
     } catch (error: any) {
-      console.error('Get all products error:', error);
+      console.error("Get all products error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch products'
+        message: error.message || "Failed to fetch products",
       });
     }
   },
@@ -82,32 +79,34 @@ export const productController = {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string | string[];
-      const categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined;
-      const forceOrder = req.query.forceOrder === 'true';
-      
+      const categoryId = req.query.categoryId
+        ? parseInt(req.query.categoryId as string)
+        : undefined;
+      const forceOrder = req.query.forceOrder === "true";
+
       const skip = (page - 1) * limit;
-      
+
       let where: any = {};
-      
+
       if (search) {
         const searchTerms = Array.isArray(search) ? search : [search];
-        where.AND = searchTerms.map(term => ({
+        where.AND = searchTerms.map((term) => ({
           OR: [
             { name: { contains: term } },
             { barcode: { contains: term } },
-            { slug: { contains: term } }
-          ]
+            { slug: { contains: term } },
+          ],
         }));
       }
-      
+
       if (categoryId) {
         where.categoryId = categoryId;
       }
-      
+
       if (forceOrder) {
         where.isForceOrder = true;
       }
-      
+
       const [products, total] = await Promise.all([
         prisma.product.findMany({
           where,
@@ -118,17 +117,17 @@ export const productController = {
               select: {
                 id: true,
                 name: true,
-                slug: true
-              }
-            }
+                slug: true,
+              },
+            },
           },
-          orderBy: forceOrder 
-            ? { forceOrderPriority: 'desc' }
-            : { createdAt: 'desc' }
+          orderBy: forceOrder
+            ? { forceOrderPriority: "desc" }
+            : { createdAt: "desc" },
         }),
-        prisma.product.count({ where })
+        prisma.product.count({ where }),
       ]);
-      
+
       res.json({
         success: true,
         data: products,
@@ -136,14 +135,14 @@ export const productController = {
           page,
           limit,
           total,
-          pages: Math.ceil(total / limit)
-        }
+          pages: Math.ceil(total / limit),
+        },
       });
     } catch (error: any) {
-      console.error('Get all products admin error:', error);
+      console.error("Get all products admin error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch products'
+        message: error.message || "Failed to fetch products",
       });
     }
   },
@@ -152,11 +151,11 @@ export const productController = {
   async getById(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
-      
+
       if (isNaN(id)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid product ID'
+          message: "Invalid product ID",
         });
       }
 
@@ -167,28 +166,28 @@ export const productController = {
             select: {
               id: true,
               name: true,
-              slug: true
-            }
-          }
-        }
+              slug: true,
+            },
+          },
+        },
       });
 
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: 'Product not found'
+          message: "Product not found",
         });
       }
 
       res.json({
         success: true,
-        data: product
+        data: product,
       });
     } catch (error: any) {
-      console.error('Get product by ID error:', error);
+      console.error("Get product by ID error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch product'
+        message: error.message || "Failed to fetch product",
       });
     }
   },
@@ -205,28 +204,28 @@ export const productController = {
             select: {
               id: true,
               name: true,
-              slug: true
-            }
-          }
-        }
+              slug: true,
+            },
+          },
+        },
       });
 
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: 'Product not found'
+          message: "Product not found",
         });
       }
 
       res.json({
         success: true,
-        data: product
+        data: product,
       });
     } catch (error: any) {
-      console.error('Get product by slug error:', error);
+      console.error("Get product by slug error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch product'
+        message: error.message || "Failed to fetch product",
       });
     }
   },
@@ -243,28 +242,28 @@ export const productController = {
             select: {
               id: true,
               name: true,
-              slug: true
-            }
-          }
-        }
+              slug: true,
+            },
+          },
+        },
       });
 
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: 'Product not found'
+          message: "Product not found",
         });
       }
 
       res.json({
         success: true,
-        data: product
+        data: product,
       });
     } catch (error: any) {
-      console.error('Get product by barcode error:', error);
+      console.error("Get product by barcode error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch product'
+        message: error.message || "Failed to fetch product",
       });
     }
   },
@@ -274,27 +273,27 @@ export const productController = {
     try {
       const products = await prisma.product.findMany({
         where: { isForceOrder: true },
-        orderBy: { forceOrderPriority: 'desc' },
+        orderBy: { forceOrderPriority: "desc" },
         include: {
           category: {
             select: {
               id: true,
               name: true,
-              slug: true
-            }
-          }
-        }
+              slug: true,
+            },
+          },
+        },
       });
 
       res.json({
         success: true,
-        data: products
+        data: products,
       });
     } catch (error: any) {
-      console.error('Get force order products error:', error);
+      console.error("Get force order products error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch force order products'
+        message: error.message || "Failed to fetch force order products",
       });
     }
   },
@@ -306,22 +305,22 @@ export const productController = {
         select: {
           id: true,
           name: true,
-          slug: true
+          slug: true,
         },
         orderBy: {
-          name: 'asc'
-        }
+          name: "asc",
+        },
       });
 
       res.json({
         success: true,
-        data: categories
+        data: categories,
       });
     } catch (error: any) {
-      console.error('Get categories error:', error);
+      console.error("Get categories error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch categories'
+        message: error.message || "Failed to fetch categories",
       });
     }
   },
@@ -333,22 +332,22 @@ export const productController = {
         select: {
           id: true,
           barcode: true,
-          title: true
+          title: true,
         },
         orderBy: {
-          barcode: 'asc'
-        }
+          barcode: "asc",
+        },
       });
 
       res.json({
         success: true,
-        data: barcodes
+        data: barcodes,
       });
     } catch (error: any) {
-      console.error('Get barcodes error:', error);
+      console.error("Get barcodes error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to fetch barcodes'
+        message: error.message || "Failed to fetch barcodes",
       });
     }
   },
@@ -356,7 +355,7 @@ export const productController = {
   // Create product with barcode
   async create(req: Request, res: Response) {
     let savedFilenames: string[] = [];
-    
+
     try {
       const {
         barcode,
@@ -375,145 +374,140 @@ export const productController = {
       const files = req.files as Express.Multer.File[];
 
       // ==================== VALIDATION ====================
-      
-      // Validate barcode
-      if (!barcode || typeof barcode !== 'string' || barcode.trim() === '') {
+
+      if (!barcode || typeof barcode !== "string" || barcode.trim() === "") {
         return res.status(400).json({
           success: false,
-          message: 'Barcode is required'
+          message: "Barcode is required",
         });
       }
 
-      // Validate barcode title
-      if (!barcodeTitle || typeof barcodeTitle !== 'string' || barcodeTitle.trim() === '') {
+      if (
+        !barcodeTitle ||
+        typeof barcodeTitle !== "string" ||
+        barcodeTitle.trim() === ""
+      ) {
         return res.status(400).json({
           success: false,
-          message: 'Barcode title is required'
+          message: "Barcode title is required",
         });
       }
 
-      // Validate name
-      if (!name || typeof name !== 'string' || name.trim() === '') {
+      if (!name || typeof name !== "string" || name.trim() === "") {
         return res.status(400).json({
           success: false,
-          message: 'Product name is required'
+          message: "Product name is required",
         });
       }
 
       if (name.length < 2) {
         return res.status(400).json({
           success: false,
-          message: 'Product name must be at least 2 characters'
+          message: "Product name must be at least 2 characters",
         });
       }
 
       if (name.length > 100) {
         return res.status(400).json({
           success: false,
-          message: 'Product name must be less than 100 characters'
+          message: "Product name must be less than 100 characters",
         });
       }
 
-      // Validate category
       const categoryIdNum = parseInt(categoryId);
       if (isNaN(categoryIdNum)) {
         return res.status(400).json({
           success: false,
-          message: 'Valid category ID is required'
+          message: "Valid category ID is required",
         });
       }
 
-      // Check if category exists
       const category = await prisma.category.findUnique({
-        where: { id: categoryIdNum }
+        where: { id: categoryIdNum },
       });
 
       if (!category) {
         return res.status(400).json({
           success: false,
-          message: 'Category not found'
+          message: "Category not found",
         });
       }
 
-      // Check if barcode already exists in product table
       const existingProduct = await prisma.product.findUnique({
-        where: { barcode: barcode.trim() }
+        where: { barcode: barcode.trim() },
       });
 
       if (existingProduct) {
         return res.status(400).json({
           success: false,
-          message: 'Product with this barcode already exists'
+          message: "Product with this barcode already exists",
         });
       }
 
-      // Check if barcode already exists in barcode table
       const existingBarcode = await prisma.barcode.findUnique({
-        where: { barcode: barcode.trim() }
+        where: { barcode: barcode.trim() },
       });
 
       if (existingBarcode) {
         return res.status(400).json({
           success: false,
-          message: 'Barcode already exists'
+          message: "Barcode already exists",
         });
       }
 
       const slug = generateSlug(name);
 
-      // Check if slug exists
       const existingSlug = await prisma.product.findUnique({
-        where: { slug }
+        where: { slug },
       });
 
       if (existingSlug) {
         return res.status(400).json({
           success: false,
-          message: 'Product with this name already exists'
+          message: "Product with this name already exists",
         });
       }
 
-      // Validate prices
       const buyingPriceNum = parseFloat(buyingPrice);
       const sellingPriceNum = parseFloat(sellingPrice);
-      
+
       if (isNaN(buyingPriceNum) || isNaN(sellingPriceNum)) {
         return res.status(400).json({
           success: false,
-          message: 'Valid buying price and selling price are required'
+          message: "Valid buying price and selling price are required",
         });
       }
 
-      // Calculate discount and force order flags
-      const discountPercentNum = discountPercent ? parseFloat(discountPercent) : null;
-      const hasDiscountBool = discountPercentNum !== null && discountPercentNum > 0;
-      
-      const forceOrderPriorityNum = forceOrderPriority ? parseInt(forceOrderPriority) : 0;
+      const discountPercentNum = discountPercent
+        ? parseFloat(discountPercent)
+        : null;
+      const hasDiscountBool =
+        discountPercentNum !== null && discountPercentNum > 0;
+
+      const forceOrderPriorityNum = forceOrderPriority
+        ? parseInt(forceOrderPriority)
+        : 0;
       const isForceOrderBool = forceOrderPriorityNum > 0;
-
-      // Validate images
-      if ((!files || files.length === 0) && (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0)) {
-        return res.status(400).json({
-          success: false,
-          message: 'At least one product image is required'
-        });
-      }
 
       // ==================== SAVE IMAGES ====================
       let finalImages: any[] = [];
 
       if (files && files.length > 0) {
         savedFilenames = saveImagesToDisk(files);
-        finalImages = savedFilenames.map(filename => ({
-          imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
+        finalImages = savedFilenames.map((filename) => ({
+          imgUrl: `${req.protocol}://${req.get("host")}/uploads/product-images/${filename}`,
         }));
       } else if (imageUrls && Array.isArray(imageUrls)) {
         finalImages = imageUrls;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "At least one product image is required",
+        });
       }
 
       // ==================== CREATE PRODUCT & BARCODE IN TRANSACTION ====================
       const result = await prisma.$transaction(async (tx) => {
-        // 1. Create product
         const product = await tx.product.create({
           data: {
             barcode: barcode.trim(),
@@ -535,18 +529,17 @@ export const productController = {
               select: {
                 id: true,
                 name: true,
-                slug: true
-              }
-            }
-          }
+                slug: true,
+              },
+            },
+          },
         });
 
-        // 2. Create barcode record
         const barcodeRecord = await tx.barcode.create({
           data: {
             title: barcodeTitle.trim(),
-            barcode: product.barcode
-          }
+            barcode: product.barcode,
+          },
         });
 
         return { product, barcodeRecord };
@@ -556,223 +549,219 @@ export const productController = {
         success: true,
         data: {
           product: result.product,
-          barcode: result.barcodeRecord
+          barcode: result.barcodeRecord,
         },
-        message: 'Product and barcode created successfully'
+        message: "Product and barcode created successfully",
       });
     } catch (error: any) {
-      // Cleanup images on error
       if (savedFilenames.length > 0) {
-        const imagePaths = savedFilenames.map(filename => 
-          path.join(process.cwd(), 'public/uploads/product-images', filename)
+        const imagePaths = savedFilenames.map((filename) =>
+          path.join(process.cwd(), "public/uploads/product-images", filename),
         );
         deleteFiles(imagePaths);
       }
-      
-      console.error('Create product error:', error);
+
+      console.error("Create product error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to create product'
+        message: error.message || "Failed to create product",
       });
     }
   },
 
-  // Update product with barcode
+  // Update product with barcode - FIXED: Adds new images, preserves order
+  // Update product with barcode (supports existing images + new file uploads)
+  // Update product with barcode (fixed version)
   async update(req: Request, res: Response) {
     let savedFilenames: string[] = [];
-    
+
     try {
       const id = parseInt(req.params.id);
-      
       if (isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid product ID'
-        });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid product ID" });
       }
 
       const existingProduct = await prisma.product.findUnique({
-        where: { id }
+        where: { id },
       });
-
       if (!existingProduct) {
-        return res.status(404).json({
-          success: false,
-          message: 'Product not found'
-        });
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
       }
 
-      const updateData: any = { ...req.body };
       const files = req.files as Express.Multer.File[];
-      const imageUrls = req.body.images;
+      const updateData: any = {};
 
-      // Store old image paths for cleanup if replaced
-      const oldImages = existingProduct.images as any[];
-      let oldImagePaths: string[] = [];
-      if (oldImages && oldImages.length > 0) {
-        oldImagePaths = getImagePathsFromProduct(oldImages);
+      // List of allowed fields that can be updated directly
+      const allowedFields = [
+        "barcode",
+        "name",
+        "slug",
+        "videoUrl",
+        "description",
+        "isForceOrder",
+        "forceOrderPriority",
+        "categoryId",
+        "buyingPrice",
+        "sellingPrice",
+        "hasDiscount",
+        "discountPercent",
+        "images",
+      ];
+
+      // Copy only allowed fields from req.body
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = req.body[field];
+        }
       }
 
-      // Extract barcode fields
+      // Handle existingImages (sent as JSON string)
+      let existingImages = req.body.existingImages;
+      if (typeof existingImages === "string") {
+        try {
+          existingImages = JSON.parse(existingImages);
+        } catch (e) {
+          existingImages = [];
+        }
+      }
+
+      // Handle barcode title separately (it goes to barcode table, not product)
+      const updateBarcodeTitle = req.body.barcodeTitle;
       const updateBarcode = updateData.barcode;
-      const updateBarcodeTitle = updateData.barcodeTitle;
-      
-      // Remove from product update data
-      delete updateData.barcodeTitle;
+      delete updateData.barcodeTitle; // not a product field
 
-      // ==================== PARSE NUMERIC FIELDS ====================
-      if (updateData.categoryId !== undefined) {
+      // Parse numeric fields
+      if (updateData.categoryId !== undefined)
         updateData.categoryId = parseInt(updateData.categoryId);
-      }
-      if (updateData.buyingPrice !== undefined) {
+      if (updateData.buyingPrice !== undefined)
         updateData.buyingPrice = parseFloat(updateData.buyingPrice);
-      }
-      if (updateData.sellingPrice !== undefined) {
+      if (updateData.sellingPrice !== undefined)
         updateData.sellingPrice = parseFloat(updateData.sellingPrice);
-      }
-      if (updateData.forceOrderPriority !== undefined) {
+      if (updateData.forceOrderPriority !== undefined)
         updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
-      }
-      if (updateData.discountPercent !== undefined) {
+      if (updateData.discountPercent !== undefined)
         updateData.discountPercent = parseFloat(updateData.discountPercent);
-      }
 
-      // Calculate discount and force order flags from the values
-      if (updateData.discountPercent !== undefined) {
+      // Auto‑set boolean flags
+      if (updateData.discountPercent !== undefined)
         updateData.hasDiscount = updateData.discountPercent > 0;
-      }
-      if (updateData.forceOrderPriority !== undefined) {
+      if (updateData.forceOrderPriority !== undefined)
         updateData.isForceOrder = updateData.forceOrderPriority > 0;
-      }
 
-      // ==================== VALIDATION ====================
-      
-      // If name is updated, regenerate slug
-      if (updateData.name) {
-        if (updateData.name.length < 2) {
-          return res.status(400).json({
-            success: false,
-            message: 'Product name must be at least 2 characters'
-          });
-        }
-        if (updateData.name.length > 100) {
-          return res.status(400).json({
-            success: false,
-            message: 'Product name must be less than 100 characters'
-          });
-        }
-        updateData.slug = generateSlug(updateData.name);
-        
-        const existingSlug = await prisma.product.findFirst({
-          where: {
-            slug: updateData.slug,
-            id: { not: id }
-          }
-        });
-        
-        if (existingSlug) {
-          return res.status(400).json({
-            success: false,
-            message: 'Product with this name already exists'
-          });
-        }
-      }
-
-      // If barcode is updated, check for duplicates
-      if (updateBarcode) {
-        const existingBarcode = await prisma.product.findFirst({
-          where: {
-            barcode: updateBarcode.trim(),
-            id: { not: id }
-          }
-        });
-        
-        if (existingBarcode) {
-          return res.status(400).json({
-            success: false,
-            message: 'Product with this barcode already exists'
-          });
-        }
-      }
-
-      // ==================== HANDLE IMAGES ====================
-      let finalImages: any[] = [];
+      // Build final images array: existing (ordered) + new uploaded files
+      let finalImages: any[] = existingImages ? [...existingImages] : [];
 
       if (files && files.length > 0) {
-        // Save new images
         savedFilenames = saveImagesToDisk(files);
-        finalImages = savedFilenames.map(filename => ({
-          imgUrl: `${req.protocol}://${req.get('host')}/uploads/product-images/${filename}`
+        const newImageUrls = savedFilenames.map((filename) => ({
+          imgUrl: `${req.protocol}://${req.get("host")}/uploads/product-images/${filename}`,
         }));
-        updateData.images = finalImages;
-      } else if (imageUrls && Array.isArray(imageUrls)) {
-        updateData.images = imageUrls;
+        finalImages = [...finalImages, ...newImageUrls];
       }
 
-      // ==================== UPDATE PRODUCT & BARCODE IN TRANSACTION ====================
+      if (finalImages.length > 0) {
+        updateData.images = finalImages;
+      }
+
+      // Validate name and barcode uniqueness
+      if (updateData.name) {
+        if (updateData.name.length < 2) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: "Product name must be at least 2 characters",
+            });
+        }
+        if (updateData.name.length > 100) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: "Product name must be less than 100 characters",
+            });
+        }
+        updateData.slug = generateSlug(updateData.name);
+        const existingSlug = await prisma.product.findFirst({
+          where: { slug: updateData.slug, id: { not: id } },
+        });
+        if (existingSlug) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: "Product with this name already exists",
+            });
+        }
+      }
+
+      if (updateBarcode) {
+        const existingBarcode = await prisma.product.findFirst({
+          where: { barcode: updateBarcode.trim(), id: { not: id } },
+        });
+        if (existingBarcode) {
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: "Product with this barcode already exists",
+            });
+        }
+      }
+
+      // 🔁 Transaction: update product and associated barcode
       const result = await prisma.$transaction(async (tx) => {
-        // Update product
         const product = await tx.product.update({
           where: { id },
           data: updateData,
           include: {
-            category: {
-              select: {
-                id: true,
-                name: true,
-                slug: true
-              }
-            }
-          }
+            category: { select: { id: true, name: true, slug: true } },
+          },
         });
 
-        // Update barcode if changed
         if (updateBarcode || updateBarcodeTitle) {
-          const existingBarcodeRecord = await tx.barcode.findUnique({
-            where: { barcode: existingProduct.barcode }
+          const barcodeRecord = await tx.barcode.findUnique({
+            where: { barcode: existingProduct.barcode },
           });
-
-          if (existingBarcodeRecord) {
+          if (barcodeRecord) {
             await tx.barcode.update({
-              where: { id: existingBarcodeRecord.id },
+              where: { id: barcodeRecord.id },
               data: {
-                title: updateBarcodeTitle || existingBarcodeRecord.title,
-                barcode: updateBarcode || existingBarcodeRecord.barcode
-              }
+                title: updateBarcodeTitle || barcodeRecord.title,
+                barcode: updateBarcode || barcodeRecord.barcode,
+              },
             });
           }
         }
-
         return product;
       });
-
-      // Delete old images if replaced
-      if (savedFilenames.length > 0 && oldImagePaths.length > 0) {
-        deleteFiles(oldImagePaths);
-      }
 
       res.json({
         success: true,
         data: result,
-        message: 'Product updated successfully'
+        message: "Product updated successfully",
       });
     } catch (error: any) {
-      // Cleanup new images on error
-      if (savedFilenames.length > 0) {
-        const newImagePaths = savedFilenames.map(filename => 
-          path.join(process.cwd(), 'public/uploads/product-images', filename)
+      // Cleanup newly uploaded files on error
+      if (savedFilenames.length) {
+        const paths = savedFilenames.map((f) =>
+          path.join(process.cwd(), "public/uploads/product-images", f),
         );
-        deleteFiles(newImagePaths);
+        deleteFiles(paths);
       }
-      
-      console.error('Update product error:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to update product'
-      });
+      console.error("Update product error:", error);
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: error.message || "Internal server error",
+        });
     }
   },
-
   // Delete product with barcode
   async delete(req: Request, res: Response) {
     try {
@@ -781,69 +770,63 @@ export const productController = {
       if (isNaN(id)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid product ID'
+          message: "Invalid product ID",
         });
       }
 
       const product = await prisma.product.findUnique({
-        where: { id }
+        where: { id },
       });
 
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: 'Product not found'
+          message: "Product not found",
         });
       }
 
-      // Check if product has any sale items
       const saleItems = await prisma.saleItem.findMany({
         where: { productId: id },
-        take: 1
+        take: 1,
       });
 
       if (saleItems.length > 0) {
         return res.status(400).json({
           success: false,
-          message: 'Cannot delete product with existing sales records'
+          message: "Cannot delete product with existing sales records",
         });
       }
 
-      // Get image paths for cleanup
       const images = product.images as any[];
       let imagePaths: string[] = [];
       if (images && images.length > 0) {
         imagePaths = getImagePathsFromProduct(images);
       }
 
-      // Delete product and barcode in transaction
       await prisma.$transaction(async (tx) => {
-        // Delete product
         await tx.product.delete({
-          where: { id }
+          where: { id },
         });
 
-        // Delete associated barcode
         await tx.barcode.deleteMany({
-          where: { barcode: product.barcode }
+          where: { barcode: product.barcode },
         });
       });
 
-      // Delete images from disk
       if (imagePaths.length > 0) {
         deleteFiles(imagePaths);
       }
 
       res.json({
         success: true,
-        message: 'Product and barcode deleted successfully'
+        message: "Product and barcode deleted successfully",
       });
     } catch (error: any) {
-      console.error('Delete product error:', error);
+      console.error("Delete product error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to delete product'
+        message: error.message || "Failed to delete product",
       });
     }
-  }
+  },
 };

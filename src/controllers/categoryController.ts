@@ -63,7 +63,8 @@ export const categoryController = {
       });
     }
   },
-  // Get all categories
+
+  // Get all categories (public)
   async getAll(req: Request, res: Response) {
     try {
       const categories = await prisma.category.findMany({
@@ -119,9 +120,8 @@ export const categoryController = {
               id: true,
               name: true,
               barcode: true,
-              sellingPrice: true,
               isForceOrder: true,
-              // ✅ Removed stockQuantity - doesn't exist in Product model
+              // sellingPrice removed (now in Stock table)
             },
           },
         },
@@ -161,8 +161,8 @@ export const categoryController = {
               name: true,
               barcode: true,
               slug: true,
-              sellingPrice: true,
               isForceOrder: true,
+              // sellingPrice removed
             },
           },
         },

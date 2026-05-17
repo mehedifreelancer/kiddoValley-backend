@@ -16,7 +16,6 @@ export const productController = {
       const forceOrder = req.query.forceOrder === "true";
 
       const skip = (page - 1) * limit;
-
       let where: any = {};
 
       if (search) {
@@ -25,13 +24,8 @@ export const productController = {
           OR: [{ name: { contains: term } }, { barcode: { contains: term } }],
         }));
       }
-
-      if (category) {
-        where.category = { slug: category };
-      }
-      if (forceOrder) {
-        where.isForceOrder = true;
-      }
+      if (category) where.category = { slug: category };
+      if (forceOrder) where.isForceOrder = true;
 
       const [products, total] = await Promise.all([
         prisma.product.findMany({
@@ -39,13 +33,7 @@ export const productController = {
           skip,
           take: limit,
           include: {
-            category: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-              },
-            },
+            category: { select: { id: true, name: true, slug: true } },
           },
           orderBy: forceOrder
             ? { forceOrderPriority: "desc" }
@@ -57,12 +45,7 @@ export const productController = {
       res.json({
         success: true,
         data: products,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) },
       });
     } catch (error: any) {
       console.error("Get all products error:", error);
@@ -85,7 +68,6 @@ export const productController = {
       const forceOrder = req.query.forceOrder === "true";
 
       const skip = (page - 1) * limit;
-
       let where: any = {};
 
       if (search) {
@@ -98,14 +80,8 @@ export const productController = {
           ],
         }));
       }
-
-      if (categoryId) {
-        where.categoryId = categoryId;
-      }
-
-      if (forceOrder) {
-        where.isForceOrder = true;
-      }
+      if (categoryId) where.categoryId = categoryId;
+      if (forceOrder) where.isForceOrder = true;
 
       const [products, total] = await Promise.all([
         prisma.product.findMany({
@@ -113,13 +89,7 @@ export const productController = {
           skip,
           take: limit,
           include: {
-            category: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-              },
-            },
+            category: { select: { id: true, name: true, slug: true } },
           },
           orderBy: forceOrder
             ? { forceOrderPriority: "desc" }
@@ -131,12 +101,7 @@ export const productController = {
       res.json({
         success: true,
         data: products,
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-        },
+        pagination: { page, limit, total, pages: Math.ceil(total / limit) },
       });
     } catch (error: any) {
       console.error("Get all products admin error:", error);
@@ -151,38 +116,21 @@ export const productController = {
   async getById(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
-
-      if (isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid product ID",
-        });
-      }
+      if (isNaN(id))
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid product ID" });
 
       const product = await prisma.product.findUnique({
         where: { id },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-        },
+        include: { category: { select: { id: true, name: true, slug: true } } },
       });
+      if (!product)
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
 
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: "Product not found",
-        });
-      }
-
-      res.json({
-        success: true,
-        data: product,
-      });
+      res.json({ success: true, data: product });
     } catch (error: any) {
       console.error("Get product by ID error:", error);
       res.status(500).json({
@@ -196,31 +144,15 @@ export const productController = {
   async getBySlug(req: Request, res: Response) {
     try {
       const { slug } = req.params;
-
       const product = await prisma.product.findUnique({
         where: { slug },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-        },
+        include: { category: { select: { id: true, name: true, slug: true } } },
       });
-
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: "Product not found",
-        });
-      }
-
-      res.json({
-        success: true,
-        data: product,
-      });
+      if (!product)
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+      res.json({ success: true, data: product });
     } catch (error: any) {
       console.error("Get product by slug error:", error);
       res.status(500).json({
@@ -234,31 +166,15 @@ export const productController = {
   async getByBarcode(req: Request, res: Response) {
     try {
       const { barcode } = req.params;
-
       const product = await prisma.product.findUnique({
         where: { barcode },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-        },
+        include: { category: { select: { id: true, name: true, slug: true } } },
       });
-
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: "Product not found",
-        });
-      }
-
-      res.json({
-        success: true,
-        data: product,
-      });
+      if (!product)
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+      res.json({ success: true, data: product });
     } catch (error: any) {
       console.error("Get product by barcode error:", error);
       res.status(500).json({
@@ -274,21 +190,9 @@ export const productController = {
       const products = await prisma.product.findMany({
         where: { isForceOrder: true },
         orderBy: { forceOrderPriority: "desc" },
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-        },
+        include: { category: { select: { id: true, name: true, slug: true } } },
       });
-
-      res.json({
-        success: true,
-        data: products,
-      });
+      res.json({ success: true, data: products });
     } catch (error: any) {
       console.error("Get force order products error:", error);
       res.status(500).json({
@@ -302,20 +206,10 @@ export const productController = {
   async getCategoriesForDropdown(req: Request, res: Response) {
     try {
       const categories = await prisma.category.findMany({
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-        orderBy: {
-          name: "asc",
-        },
+        select: { id: true, name: true, slug: true },
+        orderBy: { name: "asc" },
       });
-
-      res.json({
-        success: true,
-        data: categories,
-      });
+      res.json({ success: true, data: categories });
     } catch (error: any) {
       console.error("Get categories error:", error);
       res.status(500).json({
@@ -329,20 +223,10 @@ export const productController = {
   async getBarcodesForDropdown(req: Request, res: Response) {
     try {
       const barcodes = await prisma.barcode.findMany({
-        select: {
-          id: true,
-          barcode: true,
-          title: true,
-        },
-        orderBy: {
-          barcode: "asc",
-        },
+        select: { id: true, barcode: true, title: true },
+        orderBy: { barcode: "asc" },
       });
-
-      res.json({
-        success: true,
-        data: barcodes,
-      });
+      res.json({ success: true, data: barcodes });
     } catch (error: any) {
       console.error("Get barcodes error:", error);
       res.status(500).json({
@@ -352,7 +236,7 @@ export const productController = {
     }
   },
 
-  // Create product with barcode
+  // ==================== CREATE ====================
   async create(req: Request, res: Response) {
     let savedFilenames: string[] = [];
 
@@ -362,136 +246,97 @@ export const productController = {
         barcodeTitle,
         name,
         categoryId,
-        buyingPrice,
+        buyingOrMakingPrice,
         sellingPrice,
+        discountPercent,
+        initialStock,
         videoUrl,
         description,
         images: imageUrls,
         forceOrderPriority,
-        discountPercent,
       } = req.body;
 
       const files = req.files as Express.Multer.File[];
 
-      // ==================== VALIDATION ====================
-
-      if (!barcode || typeof barcode !== "string" || barcode.trim() === "") {
-        return res.status(400).json({
-          success: false,
-          message: "Barcode is required",
-        });
-      }
-
+      // Validate barcode if provided
       if (
-        !barcodeTitle ||
-        typeof barcodeTitle !== "string" ||
-        barcodeTitle.trim() === ""
+        barcode !== undefined &&
+        (typeof barcode !== "string" || barcode.trim() === "")
       ) {
         return res.status(400).json({
           success: false,
-          message: "Barcode title is required",
+          message: "If provided, barcode must be a non-empty string",
         });
       }
 
-      if (!name || typeof name !== "string" || name.trim() === "") {
-        return res.status(400).json({
-          success: false,
-          message: "Product name is required",
-        });
+      // If barcode is provided but barcodeTitle is missing, use product name as title
+      let finalBarcodeTitle = barcodeTitle;
+      if (barcode && (!finalBarcodeTitle || finalBarcodeTitle.trim() === "")) {
+        finalBarcodeTitle = name ? name.trim() : "Product";
       }
 
-      if (name.length < 2) {
-        return res.status(400).json({
-          success: false,
-          message: "Product name must be at least 2 characters",
-        });
-      }
-
-      if (name.length > 100) {
-        return res.status(400).json({
-          success: false,
-          message: "Product name must be less than 100 characters",
-        });
-      }
+      // Product name validation
+      if (!name || typeof name !== "string" || name.trim() === "")
+        return res
+          .status(400)
+          .json({ success: false, message: "Product name required" });
+      if (name.length < 2)
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Product name at least 2 characters",
+          });
+      if (name.length > 100)
+        return res
+          .status(400)
+          .json({ success: false, message: "Product name max 100 characters" });
 
       const categoryIdNum = parseInt(categoryId);
-      if (isNaN(categoryIdNum)) {
-        return res.status(400).json({
-          success: false,
-          message: "Valid category ID is required",
-        });
-      }
-
+      if (isNaN(categoryIdNum))
+        return res
+          .status(400)
+          .json({ success: false, message: "Valid category ID required" });
       const category = await prisma.category.findUnique({
         where: { id: categoryIdNum },
       });
+      if (!category)
+        return res
+          .status(400)
+          .json({ success: false, message: "Category not found" });
 
-      if (!category) {
-        return res.status(400).json({
-          success: false,
-          message: "Category not found",
+      if (barcode) {
+        const existingProduct = await prisma.product.findUnique({
+          where: { barcode: barcode.trim() },
         });
-      }
-
-      const existingProduct = await prisma.product.findUnique({
-        where: { barcode: barcode.trim() },
-      });
-
-      if (existingProduct) {
-        return res.status(400).json({
-          success: false,
-          message: "Product with this barcode already exists",
+        if (existingProduct)
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: "Product with this barcode already exists",
+            });
+        const existingBarcode = await prisma.barcode.findUnique({
+          where: { barcode: barcode.trim() },
         });
-      }
-
-      const existingBarcode = await prisma.barcode.findUnique({
-        where: { barcode: barcode.trim() },
-      });
-
-      if (existingBarcode) {
-        return res.status(400).json({
-          success: false,
-          message: "Barcode already exists",
-        });
+        if (existingBarcode)
+          return res
+            .status(400)
+            .json({ success: false, message: "Barcode already exists" });
       }
 
       const slug = generateSlug(name);
+      const existingSlug = await prisma.product.findUnique({ where: { slug } });
+      if (existingSlug)
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "Product with this name already exists",
+          });
 
-      const existingSlug = await prisma.product.findUnique({
-        where: { slug },
-      });
-
-      if (existingSlug) {
-        return res.status(400).json({
-          success: false,
-          message: "Product with this name already exists",
-        });
-      }
-
-      const buyingPriceNum = parseFloat(buyingPrice);
-      const sellingPriceNum = parseFloat(sellingPrice);
-
-      if (isNaN(buyingPriceNum) || isNaN(sellingPriceNum)) {
-        return res.status(400).json({
-          success: false,
-          message: "Valid buying price and selling price are required",
-        });
-      }
-
-      const discountPercentNum = discountPercent
-        ? parseFloat(discountPercent)
-        : null;
-      const hasDiscountBool =
-        discountPercentNum !== null && discountPercentNum > 0;
-
-      const forceOrderPriorityNum = forceOrderPriority
-        ? parseInt(forceOrderPriority)
-        : 0;
-      const isForceOrderBool = forceOrderPriorityNum > 0;
-
-      // ==================== SAVE IMAGES ====================
+      // Save images
       let finalImages: any[] = [];
-
       if (files && files.length > 0) {
         savedFilenames = saveImagesToDisk(files);
         finalImages = savedFilenames.map((filename) => ({
@@ -500,102 +345,110 @@ export const productController = {
       } else if (imageUrls && Array.isArray(imageUrls)) {
         finalImages = imageUrls;
       } else {
-        return res.status(400).json({
-          success: false,
-          message: "At least one product image is required",
-        });
+        return res
+          .status(400)
+          .json({
+            success: false,
+            message: "At least one product image required",
+          });
       }
 
-      // ==================== CREATE PRODUCT & BARCODE IN TRANSACTION ====================
       const result = await prisma.$transaction(async (tx) => {
         const product = await tx.product.create({
           data: {
-            barcode: barcode.trim(),
+            barcode: barcode ? barcode.trim() : null,
             name: name.trim(),
             slug,
             videoUrl: videoUrl || null,
             description: description || null,
             images: finalImages,
-            isForceOrder: isForceOrderBool,
-            forceOrderPriority: forceOrderPriorityNum,
-            categoryId: categoryIdNum,
-            buyingPrice: buyingPriceNum,
-            sellingPrice: sellingPriceNum,
-            hasDiscount: hasDiscountBool,
-            discountPercent: discountPercentNum,
+            isForceOrder:
+              (forceOrderPriority && parseInt(forceOrderPriority) > 0) || false,
+            forceOrderPriority: parseInt(forceOrderPriority) || 0,
+            category: { connect: { id: categoryIdNum } },
           },
           include: {
-            category: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-              },
+            category: { select: { id: true, name: true, slug: true } },
+          },
+        });
+
+        // Create barcode record only if barcode and title exist (title now optional)
+        if (barcode && finalBarcodeTitle) {
+          await tx.barcode.create({
+            data: {
+              title: finalBarcodeTitle.trim(),
+              barcode: product.barcode!,
             },
-          },
-        });
+          });
+        }
 
-        const barcodeRecord = await tx.barcode.create({
-          data: {
-            title: barcodeTitle.trim(),
-            barcode: product.barcode,
-          },
-        });
+        // If initial stock data is provided, create a default variant and stock batch
+        if (buyingOrMakingPrice && sellingPrice && initialStock) {
+          const defaultSku = product.barcode
+            ? product.barcode
+            : `PROD-${product.id}`;
+          const variant = await tx.variant.create({
+            data: { sku: defaultSku, productId: product.id, attributes: {} },
+          });
+          await tx.stock.create({
+            data: {
+              variantId: variant.id,
+              batchNo: "1",
+              buyingOrMakingPrice: parseFloat(buyingOrMakingPrice),
+              sellingPrice: parseFloat(sellingPrice),
+              discountPercent: parseInt(discountPercent) || 0,
+              currentQty: parseInt(initialStock),
+            },
+          });
+        }
 
-        return { product, barcodeRecord };
+        return { product };
       });
 
       res.status(201).json({
         success: true,
-        data: {
-          product: result.product,
-          barcode: result.barcodeRecord,
-        },
-        message: "Product and barcode created successfully",
+        data: { product: result.product },
+        message: "Product created successfully (draft)",
       });
     } catch (error: any) {
-      if (savedFilenames.length > 0) {
+      if (savedFilenames.length) {
         const imagePaths = savedFilenames.map((filename) =>
           path.join(process.cwd(), "public/uploads/product-images", filename),
         );
         deleteFiles(imagePaths);
       }
-
       console.error("Create product error:", error);
-      res.status(500).json({
-        success: false,
-        message: error.message || "Failed to create product",
-      });
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: error.message || "Failed to create product",
+        });
     }
   },
 
-  // Update product with barcode - FIXED: Adds new images, preserves order
-  // Update product with barcode (supports existing images + new file uploads)
-  // Update product with barcode (fixed version)
+  // ==================== UPDATE ====================
   async update(req: Request, res: Response) {
     let savedFilenames: string[] = [];
 
     try {
       const id = parseInt(req.params.id);
-      if (isNaN(id)) {
+      if (isNaN(id))
         return res
           .status(400)
           .json({ success: false, message: "Invalid product ID" });
-      }
 
       const existingProduct = await prisma.product.findUnique({
         where: { id },
       });
-      if (!existingProduct) {
+      if (!existingProduct)
         return res
           .status(404)
           .json({ success: false, message: "Product not found" });
-      }
 
       const files = req.files as Express.Multer.File[];
       const updateData: any = {};
 
-      // List of allowed fields that can be updated directly
       const allowedFields = [
         "barcode",
         "name",
@@ -605,115 +458,76 @@ export const productController = {
         "isForceOrder",
         "forceOrderPriority",
         "categoryId",
-        "buyingPrice",
-        "sellingPrice",
-        "hasDiscount",
-        "discountPercent",
         "images",
       ];
-
-      // Copy only allowed fields from req.body
       for (const field of allowedFields) {
-        if (req.body[field] !== undefined) {
-          updateData[field] = req.body[field];
-        }
+        if (req.body[field] !== undefined) updateData[field] = req.body[field];
       }
 
-      // Handle existingImages (sent as JSON string)
       let existingImages = req.body.existingImages;
       if (typeof existingImages === "string") {
         try {
           existingImages = JSON.parse(existingImages);
-        } catch (e) {
+        } catch {
           existingImages = [];
         }
       }
-
-      // Handle barcode title separately (it goes to barcode table, not product)
       const updateBarcodeTitle = req.body.barcodeTitle;
       const updateBarcode = updateData.barcode;
-      delete updateData.barcodeTitle; // not a product field
+      delete updateData.barcodeTitle;
 
-      // Parse numeric fields
-      if (updateData.categoryId !== undefined)
-        updateData.categoryId = parseInt(updateData.categoryId);
-      if (updateData.buyingPrice !== undefined)
-        updateData.buyingPrice = parseFloat(updateData.buyingPrice);
-      if (updateData.sellingPrice !== undefined)
-        updateData.sellingPrice = parseFloat(updateData.sellingPrice);
       if (updateData.forceOrderPriority !== undefined)
         updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
-      if (updateData.discountPercent !== undefined)
-        updateData.discountPercent = parseFloat(updateData.discountPercent);
-
-      // Auto‑set boolean flags
-      if (updateData.discountPercent !== undefined)
-        updateData.hasDiscount = updateData.discountPercent > 0;
-      if (updateData.forceOrderPriority !== undefined)
-        updateData.isForceOrder = updateData.forceOrderPriority > 0;
-
-      // Build final images array: existing (ordered) + new uploaded files
-      let finalImages: any[] = existingImages ? [...existingImages] : [];
-
-      if (files && files.length > 0) {
-        savedFilenames = saveImagesToDisk(files);
-        const newImageUrls = savedFilenames.map((filename) => ({
-          imgUrl: `${req.protocol}://${req.get("host")}/uploads/product-images/${filename}`,
-        }));
-        finalImages = [...finalImages, ...newImageUrls];
-      }
-
-      if (finalImages.length > 0) {
-        updateData.images = finalImages;
-      }
-
-      // Validate name and barcode uniqueness
+      if (updateData.categoryId !== undefined)
+        updateData.categoryId = parseInt(updateData.categoryId);
       if (updateData.name) {
-        if (updateData.name.length < 2) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: "Product name must be at least 2 characters",
-            });
-        }
-        if (updateData.name.length > 100) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: "Product name must be less than 100 characters",
-            });
-        }
+        if (updateData.name.length < 2 || updateData.name.length > 100)
+          return res.status(400).json({
+            success: false,
+            message: "Product name length must be 2-100 characters",
+          });
         updateData.slug = generateSlug(updateData.name);
         const existingSlug = await prisma.product.findFirst({
           where: { slug: updateData.slug, id: { not: id } },
         });
-        if (existingSlug) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: "Product with this name already exists",
-            });
-        }
+        if (existingSlug)
+          return res.status(400).json({
+            success: false,
+            message: "Product with this name already exists",
+          });
       }
-
       if (updateBarcode) {
         const existingBarcode = await prisma.product.findFirst({
           where: { barcode: updateBarcode.trim(), id: { not: id } },
         });
-        if (existingBarcode) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: "Product with this barcode already exists",
-            });
-        }
+        if (existingBarcode)
+          return res.status(400).json({
+            success: false,
+            message: "Product with this barcode already exists",
+          });
       }
 
-      // 🔁 Transaction: update product and associated barcode
+      let finalImages: any[] = existingImages ? [...existingImages] : [];
+      if (files && files.length > 0) {
+        savedFilenames = saveImagesToDisk(files);
+        const newUrls = savedFilenames.map((f) => ({
+          imgUrl: `${req.protocol}://${req.get("host")}/uploads/product-images/${f}`,
+        }));
+        finalImages = [...finalImages, ...newUrls];
+      }
+      if (finalImages.length) updateData.images = finalImages;
+      if (updateData.images === undefined && existingProduct.images) {
+        updateData.images = existingProduct.images;
+      }
+
+      const {
+        buyingOrMakingPrice: newBatchCost,
+        sellingPrice: newBatchSellingPrice,
+        discountPercent: newBatchDiscount,
+        newStockQty,
+        variantId, // optionally specify which variant to add batch to
+      } = req.body;
+
       const result = await prisma.$transaction(async (tx) => {
         const product = await tx.product.update({
           where: { id },
@@ -723,7 +537,8 @@ export const productController = {
           },
         });
 
-        if (updateBarcode || updateBarcodeTitle) {
+        // Update barcode if changed
+        if (existingProduct.barcode && (updateBarcode || updateBarcodeTitle)) {
           const barcodeRecord = await tx.barcode.findUnique({
             where: { barcode: existingProduct.barcode },
           });
@@ -737,6 +552,60 @@ export const productController = {
             });
           }
         }
+
+        // Add new batch if pricing and quantity provided
+        if (
+          newBatchCost !== undefined &&
+          newBatchSellingPrice !== undefined &&
+          newStockQty !== undefined &&
+          parseInt(newStockQty) > 0
+        ) {
+          let targetVariantId = variantId;
+          if (!targetVariantId) {
+            // Find or create default variant
+            const defaultVariant = await tx.variant.findFirst({
+              where: { productId: product.id, attributes: {} },
+            });
+            if (defaultVariant) {
+              targetVariantId = defaultVariant.id;
+            } else {
+              const defaultSku = product.barcode
+                ? product.barcode
+                : `PROD-${product.id}`;
+              const newVariant = await tx.variant.create({
+                data: {
+                  sku: defaultSku,
+                  productId: product.id,
+                  attributes: {},
+                },
+              });
+              targetVariantId = newVariant.id;
+            }
+          }
+          // Get next batch number for this variant
+          const lastBatch = await tx.stock.findFirst({
+            where: { variantId: targetVariantId },
+            orderBy: { batchNo: "desc" },
+          });
+          let nextBatchNo = "1";
+          if (lastBatch) {
+            const num = parseInt(lastBatch.batchNo);
+            nextBatchNo = isNaN(num)
+              ? lastBatch.batchNo + "-1"
+              : (num + 1).toString();
+          }
+          await tx.stock.create({
+            data: {
+              variantId: targetVariantId,
+              batchNo: nextBatchNo,
+              buyingOrMakingPrice: parseFloat(newBatchCost),
+              sellingPrice: parseFloat(newBatchSellingPrice),
+              discountPercent: parseInt(newBatchDiscount) || 0,
+              currentQty: parseInt(newStockQty),
+            },
+          });
+        }
+
         return product;
       });
 
@@ -746,7 +615,6 @@ export const productController = {
         message: "Product updated successfully",
       });
     } catch (error: any) {
-      // Cleanup newly uploaded files on error
       if (savedFilenames.length) {
         const paths = savedFilenames.map((f) =>
           path.join(process.cwd(), "public/uploads/product-images", f),
@@ -754,43 +622,36 @@ export const productController = {
         deleteFiles(paths);
       }
       console.error("Update product error:", error);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: error.message || "Internal server error",
-        });
+      res.status(500).json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
     }
   },
-  // Delete product with barcode
+
+  // DELETE product with all variants and stocks
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
-
-      if (isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid product ID",
-        });
-      }
+      if (isNaN(id))
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid product ID" });
 
       const product = await prisma.product.findUnique({
         where: { id },
+        include: { variants: true },
       });
+      if (!product)
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
 
-      if (!product) {
-        return res.status(404).json({
-          success: false,
-          message: "Product not found",
-        });
-      }
-
-      const saleItems = await prisma.saleItem.findMany({
+      const soldItems = await prisma.soldItem.findMany({
         where: { productId: id },
         take: 1,
       });
-
-      if (saleItems.length > 0) {
+      if (soldItems.length > 0) {
         return res.status(400).json({
           success: false,
           message: "Cannot delete product with existing sales records",
@@ -799,27 +660,34 @@ export const productController = {
 
       const images = product.images as any[];
       let imagePaths: string[] = [];
-      if (images && images.length > 0) {
+      if (images && images.length > 0)
         imagePaths = getImagePathsFromProduct(images);
-      }
 
       await prisma.$transaction(async (tx) => {
-        await tx.product.delete({
-          where: { id },
-        });
-
-        await tx.barcode.deleteMany({
-          where: { barcode: product.barcode },
-        });
+        // Delete all stocks of all variants
+        const variantIds = product.variants.map((v) => v.id);
+        if (variantIds.length) {
+          await tx.stock.deleteMany({
+            where: { variantId: { in: variantIds } },
+          });
+          await tx.variant.deleteMany({
+            where: { productId: id },
+          });
+        }
+        // Delete barcode if exists
+        if (product.barcode) {
+          await tx.barcode.deleteMany({ where: { barcode: product.barcode } });
+        }
+        // Finally delete product
+        await tx.product.delete({ where: { id } });
       });
 
-      if (imagePaths.length > 0) {
-        deleteFiles(imagePaths);
-      }
+      if (imagePaths.length > 0) deleteFiles(imagePaths);
 
       res.json({
         success: true,
-        message: "Product and barcode deleted successfully",
+        message:
+          "Product, variants, and associated stocks deleted successfully",
       });
     } catch (error: any) {
       console.error("Delete product error:", error);
@@ -827,6 +695,176 @@ export const productController = {
         success: false,
         message: error.message || "Failed to delete product",
       });
+    }
+  },
+
+  // Advanced filter (stock summary) – updated to work with variant-stock structure
+  async advancedFilter(req: Request, res: Response) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const search = req.query.search as string;
+      const categoryId = req.query.categoryId
+        ? parseInt(req.query.categoryId as string)
+        : undefined;
+      const minDiscount = req.query.minDiscount
+        ? parseFloat(req.query.minDiscount as string)
+        : undefined;
+      const maxDiscount = req.query.maxDiscount
+        ? parseFloat(req.query.maxDiscount as string)
+        : undefined;
+      const minBuying = req.query.minBuying
+        ? parseFloat(req.query.minBuying as string)
+        : undefined;
+      const maxBuying = req.query.maxBuying
+        ? parseFloat(req.query.maxBuying as string)
+        : undefined;
+      const minSelling = req.query.minSelling
+        ? parseFloat(req.query.minSelling as string)
+        : undefined;
+      const maxSelling = req.query.maxSelling
+        ? parseFloat(req.query.maxSelling as string)
+        : undefined;
+      const sortStock = req.query.sortStock as string;
+      const offset = (page - 1) * limit;
+
+      const conditions: string[] = [];
+      const params: any[] = [];
+
+      if (search) {
+        conditions.push(`(p.name LIKE ? OR p.barcode LIKE ?)`);
+        params.push(`%${search}%`, `%${search}%`);
+      }
+      if (categoryId) {
+        conditions.push(`p.category_id = ?`);
+        params.push(categoryId);
+      }
+
+      // Subquery for latest stock info (now joins via variants)
+      const latestStockSubquery = `
+        SELECT s.buying_or_making_price, s.selling_price, s.discount_percent
+        FROM stocks s
+        JOIN variants v ON v.id = s.variant_id
+        WHERE v.product_id = p.id
+        ORDER BY s.created_at DESC
+        LIMIT 1
+      `;
+
+      if (minDiscount !== undefined || maxDiscount !== undefined) {
+        const discountParts: string[] = [];
+        if (minDiscount !== undefined)
+          discountParts.push(`ls.discount_percent >= ${minDiscount}`);
+        if (maxDiscount !== undefined)
+          discountParts.push(`ls.discount_percent <= ${maxDiscount}`);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM (${latestStockSubquery}) ls WHERE ${discountParts.join(" AND ")})`,
+        );
+      }
+
+      if (minBuying !== undefined || maxBuying !== undefined) {
+        const buyingParts: string[] = [];
+        if (minBuying !== undefined)
+          buyingParts.push(`ls.buying_or_making_price >= ${minBuying}`);
+        if (maxBuying !== undefined)
+          buyingParts.push(`ls.buying_or_making_price <= ${maxBuying}`);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM (${latestStockSubquery}) ls WHERE ${buyingParts.join(" AND ")})`,
+        );
+      }
+
+      if (minSelling !== undefined || maxSelling !== undefined) {
+        const sellingParts: string[] = [];
+        if (minSelling !== undefined)
+          sellingParts.push(`ls.selling_price >= ${minSelling}`);
+        if (maxSelling !== undefined)
+          sellingParts.push(`ls.selling_price <= ${maxSelling}`);
+        conditions.push(
+          `EXISTS (SELECT 1 FROM (${latestStockSubquery}) ls WHERE ${sellingParts.join(" AND ")})`,
+        );
+      }
+
+      const whereClause = conditions.length
+        ? `WHERE ${conditions.join(" AND ")}`
+        : "";
+      let orderClause = "ORDER BY total_stock ASC";
+      if (sortStock === "high") orderClause = "ORDER BY total_stock DESC";
+
+      const query = `
+        SELECT 
+          p.id,
+          p.barcode,
+          p.name,
+          p.images,
+          p.category_id,
+          c.name as category_name,
+          COALESCE(SUM(s.current_qty), 0) as total_stock,
+          (
+            SELECT s2.buying_or_making_price 
+            FROM stocks s2
+            JOIN variants v2 ON v2.id = s2.variant_id
+            WHERE v2.product_id = p.id
+            ORDER BY s2.created_at DESC 
+            LIMIT 1
+          ) as latest_buying_price,
+          (
+            SELECT s2.selling_price 
+            FROM stocks s2
+            JOIN variants v2 ON v2.id = s2.variant_id
+            WHERE v2.product_id = p.id
+            ORDER BY s2.created_at DESC 
+            LIMIT 1
+          ) as latest_selling_price,
+          (
+            SELECT s2.discount_percent 
+            FROM stocks s2
+            JOIN variants v2 ON v2.id = s2.variant_id
+            WHERE v2.product_id = p.id
+            ORDER BY s2.created_at DESC 
+            LIMIT 1
+          ) as latest_discount_percent
+        FROM products p
+        LEFT JOIN variants v ON v.product_id = p.id
+        LEFT JOIN stocks s ON s.variant_id = v.id
+        LEFT JOIN categories c ON p.category_id = c.id
+        ${whereClause}
+        GROUP BY p.id, p.barcode, p.name, p.images, p.category_id, c.name
+        ${orderClause}
+        LIMIT ? OFFSET ?
+      `;
+      params.push(limit, offset);
+
+      const products = (await prisma.$queryRawUnsafe(
+        query,
+        ...params,
+      )) as any[];
+
+      const countQuery = `
+        SELECT COUNT(DISTINCT p.id) as total
+        FROM products p
+        LEFT JOIN variants v ON v.product_id = p.id
+        LEFT JOIN stocks s ON s.variant_id = v.id
+        ${whereClause}
+      `;
+      const countParams = params.slice(0, -2);
+      const totalResult = (await prisma.$queryRawUnsafe(
+        countQuery,
+        ...countParams,
+      )) as any[];
+      const total = Number(totalResult[0]?.total || 0);
+
+      res.json({
+        success: true,
+        data: products,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      });
+    } catch (error: any) {
+      console.error("Advanced filter error:", error);
+      res.status(500).json({ success: false, message: error.message });
     }
   },
 };

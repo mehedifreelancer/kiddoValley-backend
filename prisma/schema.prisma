@@ -34,76 +34,122 @@ model Category {
 }
 
 model Barcode {
-  id         Int      @id @default(autoincrement())
-  title      String   // "Pop Up Book"
-  barcode    String   @unique  // Links to product.barcode
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  title     String
+  barcode   String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("barcodes")
 }
 
 model Product {
-  id                 Int               @id @default(autoincrement())
-  barcode            String            @unique
+  id                 Int      @id @default(autoincrement())
   name               String
-  slug               String            @unique
+  slug               String   @unique
+  barcode            String?  @unique
+  categoryId         Int
+  category           Category @relation(fields: [categoryId], references: [id])
+  description        String?
   videoUrl           String?
   images             Json
-  description        String?           // ✅ Add this for rich text editor
-  isForceOrder       Boolean           @default(false)
-  forceOrderPriority Int               @default(0)
-  categoryId         Int
-  category           Category          @relation(fields: [categoryId], references: [id])
-  buyingPrice        Float
-  sellingPrice       Float
-  hasDiscount        Boolean           @default(false)
-  discountPercent    Float?
-  saleItems          SaleItem[]
-  suppliers          ProductSupplier[]
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  isForceOrder       Boolean  @default(false)
+  forceOrderPriority Int      @default(0)
+  isPublished        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  @@unique([categoryId, slug])
-  @@index([barcode])
-  @@index([name])
-  @@index([slug])
-  @@index([isForceOrder, forceOrderPriority])
+  variants     Variant[]
+  suppliers    ProductSupplier[]
+  manufactures Manufacture[] // relation to Manufacture
+
   @@map("products")
 }
 
+model Variant {
+  id              Int      @id @default(autoincrement())
+  sku             String   @unique
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id])
+  attributes      Json // e.g., { "color": "Red" }
+  images          Json? // up to 3 images
+  isImported      Boolean  @default(false)
+  countryOfOrigin String?
+  manufactureId   Int? // optional link to Manufacture
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  stocks Stock[] // all batches of this variant
+
+  @@map("variants")
+}
+
+model Stock {
+  id                  Int      @id @default(autoincrement())
+  variantId           Int
+  variant             Variant  @relation(fields: [variantId], references: [id])
+  batchNo             String
+  buyingOrMakingPrice Float
+  sellingPrice        Float
+  discountPercent     Int      @default(0)
+  currentQty          Int
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  soldItems SoldItem[]
+  movements StockMovement[]
+
+  @@map("stocks")
+}
+
+model StockMovement {
+  id          Int      @id @default(autoincrement())
+  stockId     Int
+  stock       Stock    @relation(fields: [stockId], references: [id])
+  productId   Int // denormalized for faster queries
+  type        String // PURCHASE, SALE, ADJUSTMENT, PRICE_CHANGE
+  quantity    Int // positive = add, negative = remove
+  reason      String?
+  referenceId Int? // saleId or other reference
+  createdAt   DateTime @default(now())
+  createdBy   Int?
+
+  @@map("stock_movements")
+}
+
 model Sale {
-  id            Int        @id @default(autoincrement())
-  invoiceNo     String     @unique
-  items         SaleItem[]
+  id            Int      @id @default(autoincrement())
+  invoiceNo     String   @unique
   subtotal      Float
   tax           Float?
   discount      Float?
   total         Float
   paymentMode   String?
-  paymentStatus String     @default("paid")
+  paymentStatus String   @default("paid")
   customerName  String?
   customerPhone String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items SoldItem[]
 
   @@map("sales")
 }
 
-model SaleItem {
-  id              Int      @id @default(autoincrement())
-  saleId          Int
-  sale            Sale     @relation(fields: [saleId], references: [id])
-  productId       Int
-  product         Product  @relation(fields: [productId], references: [id])
-  quantity        Int
-  buyingPrice     Float
-  sellingPrice    Float
-  discountPercent Float?
-  finalPrice      Float
-  createdAt       DateTime @default(now())
+model SoldItem {
+  id         Int      @id @default(autoincrement())
+  saleId     Int
+  sale       Sale     @relation(fields: [saleId], references: [id])
+  productId  Int
+  variantId  Int? // optional for reporting
+  stockId    Int
+  stock      Stock    @relation(fields: [stockId], references: [id])
+  quantity   Int
+  unitPrice  Float // selling price at the time of sale
+  totalPrice Float
+  createdAt  DateTime @default(now())
 
-  @@map("sale_items")
+  @@map("sold_items")
 }
 
 model Supplier {
@@ -115,9 +161,9 @@ model Supplier {
   address       String?
   gstNumber     String?
   paymentTerms  String?
-  products      ProductSupplier[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  products      ProductSupplier[]
 
   @@map("suppliers")
 }
@@ -143,4 +189,31 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+model Manufacture {
+  id              Int      @id @default(autoincrement())
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id])
+  variantId       Int? // which variant this manufacture produced
+  totalQuantity   Int
+  costComponents  Json? // breakdown of costs
+  notes           String?
+  totalCost       Float
+  unitCost        Float
+  manufactureDate DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("manufactures")
+}
+
+model ProductAttribute {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  values    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("product_attributes")
 }

@@ -12,6 +12,11 @@ import publicCategoryRoutes from "./routes/public/categories";
 import publicProductRoutes from "./routes/public/products";
 import adminAuthRoutes from "./routes/admin/auth";
 import adminBarcodeRoutes from "./routes/admin/barcodes";
+import adminStockRoutes from "./routes/admin/stock";
+import manufactureRoutes from "./routes/admin/manufactures";
+import attributeRoutes from "./routes/admin/attributes";
+import adminVariantRoutes from "./routes/admin/variant";
+
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -88,7 +93,10 @@ app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin/categories", adminAuth, adminCategoryRoutes);
 app.use("/api/admin/products", adminAuth, adminProductRoutes);
 app.use("/api/admin", adminAuth, adminBarcodeRoutes);
-
+app.use("/api/admin/stock", adminAuth, adminStockRoutes);
+app.use("/api/admin/manufactures", adminAuth, manufactureRoutes);
+app.use("/api/admin/attributes", adminAuth, attributeRoutes);
+app.use("/api/admin/variant", adminAuth, adminVariantRoutes);
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({

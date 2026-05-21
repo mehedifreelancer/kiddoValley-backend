@@ -23,9 +23,7 @@ function generateVariantSku(
 }
 
 export const variantController = {
-  // Create a new variant (with attributes, optional images, isImported)
-  // Also creates a placeholder Manufacture record
-  // Optionally creates an initial stock batch (batchNo = "1")
+  // Create a new variant (with optional images, isImported)
   async create(req: Request, res: Response) {
     let savedFilenames: string[] = [];
 
@@ -48,8 +46,6 @@ export const variantController = {
           .status(400)
           .json({ success: false, message: "Product ID required" });
       }
-
-      // ✅ Convert productId to integer
       const productIdNum = parseInt(productId);
       if (isNaN(productIdNum)) {
         return res
@@ -101,7 +97,7 @@ export const variantController = {
           },
         });
 
-        // Create a placeholder Manufacture record
+        // Placeholder manufacture record
         await tx.manufacture.create({
           data: {
             productId: productIdNum,
@@ -113,7 +109,7 @@ export const variantController = {
           },
         });
 
-        // If initial stock data is provided, create the first stock batch (batchNo = "1")
+        // Optional initial stock batch
         if (
           buyingPrice &&
           sellingPrice &&
@@ -148,7 +144,7 @@ export const variantController = {
     }
   },
 
-  // Create a default variant (attributes = {}) for a product – no pricing, no initial stock
+  // Create a default variant (no attributes)
   async createDefault(req: Request, res: Response) {
     try {
       const { productId, isImported, countryOfOrigin } = req.body;
@@ -157,8 +153,6 @@ export const variantController = {
           .status(400)
           .json({ success: false, message: "Product ID required" });
       }
-
-      // ✅ Convert productId to integer
       const productIdNum = parseInt(productId);
       if (isNaN(productIdNum)) {
         return res
@@ -193,7 +187,6 @@ export const variantController = {
             countryOfOrigin: countryOfOrigin || null,
           },
         });
-        // Placeholder manufacture
         await tx.manufacture.create({
           data: {
             productId: productIdNum,
@@ -221,9 +214,7 @@ export const variantController = {
       const productId = parseInt(req.params.productId);
       const variants = await prisma.variant.findMany({
         where: { productId },
-        include: {
-          stocks: true,
-        },
+        include: { stocks: true },
         orderBy: { createdAt: "asc" },
       });
       res.json({ success: true, data: variants });
@@ -232,14 +223,14 @@ export const variantController = {
     }
   },
 
-  // Update variant (e.g., change attributes, isImported, country)
-  // In variantController.ts, replace the update method with this:
+  // ✅ UPDATED: Update variant with proper image merging – NEVER wipe unless intended
   async update(req: Request, res: Response) {
     let savedFilenames: string[] = [];
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id))
         return res.status(400).json({ success: false, message: "Invalid ID" });
+
       const { attributes, isImported, countryOfOrigin, existingImages } =
         req.body;
       const files = req.files as Express.Multer.File[];
@@ -252,35 +243,40 @@ export const variantController = {
           .status(404)
           .json({ success: false, message: "Variant not found" });
 
-      // Parse existing images from frontend (array of { imgUrl: "..." })
-      let finalImages: any[] = [];
-      if (existingImages) {
-        try {
-          const parsed =
-            typeof existingImages === "string"
-              ? JSON.parse(existingImages)
-              : existingImages;
-          finalImages = Array.isArray(parsed) ? parsed : [];
-        } catch (e) {
-          finalImages = [];
-        }
+      // ---------- IMAGE MERGING STRATEGY ----------
+      // 1. Start with the current images in database (ensure it's an array)
+      let finalImages: any[] = Array.isArray(existingVariant.images)
+        ? (existingVariant.images as any[])
+        : [];
+
+      // 2. If the client sent an `existingImages` field, replace the list with that
+      if (existingImages !== undefined) {
+        const parsed =
+          typeof existingImages === "string"
+            ? JSON.parse(existingImages)
+            : existingImages;
+        finalImages = Array.isArray(parsed) ? parsed : [];
       }
-      // Add newly uploaded images
+
+      // 3. Add any newly uploaded files
       if (files && files.length > 0) {
         savedFilenames = saveImagesToDisk(files);
-        const newUrls = savedFilenames.map((f) => ({
-          imgUrl: `${req.protocol}://${req.get("host")}/uploads/product-images/${f}`,
+        const newUrls = savedFilenames.map((filename) => ({
+          imgUrl: `${req.protocol}://${req.get("host")}/uploads/product-images/${filename}`,
         }));
-        finalImages = [...finalImages, ...newUrls];
+        finalImages.push(...newUrls);
       }
 
       const updateData: any = {};
-      if (attributes !== undefined) updateData.attributes = attributes;
-      if (isImported !== undefined) updateData.isImported = isImported;
+      if (attributes !== undefined) {
+        updateData.attributes =
+          typeof attributes === "string" ? JSON.parse(attributes) : attributes;
+      }
+      if (isImported !== undefined)
+        updateData.isImported = isImported === true || isImported === "true";
       if (countryOfOrigin !== undefined)
         updateData.countryOfOrigin = countryOfOrigin;
-      // Always set images array (could be empty array to clear all)
-      updateData.images = finalImages;
+      updateData.images = finalImages; // always set (may be the same as before or modified)
 
       const updated = await prisma.variant.update({
         where: { id },
@@ -294,10 +290,11 @@ export const variantController = {
         );
         deleteFiles(paths);
       }
+      console.error("Update variant error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },
-  // Delete variant (only if it has no stock batches)
+  // Delete variant (only if no stock batches)
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);

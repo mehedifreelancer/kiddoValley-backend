@@ -1,7 +1,7 @@
-import { Router } from 'express';
-import { productController } from '../../controllers/productController';
-import { adminAuth } from '../../middleware/adminAuth';
-import { uploadProductImages } from '../../multer';
+import { Router } from "express";
+import { productController } from "../../controllers/productController";
+import { adminAuth } from "../../middleware/adminAuth";
+import { uploadProductImages } from "../../multer";
 
 const router = Router();
 
@@ -52,7 +52,7 @@ const router = Router();
  *       200:
  *         description: List of products with pagination
  */
-router.get('/getAll', adminAuth, productController.getAllAdmin);
+router.get("/getAll", adminAuth, productController.getAllAdmin);
 
 /**
  * @swagger
@@ -74,29 +74,7 @@ router.get('/getAll', adminAuth, productController.getAllAdmin);
  *       404:
  *         description: Product not found
  */
-router.get('/getById/:id', adminAuth, productController.getById);
-
-/**
- * @swagger
- * /api/admin/products/getByBarcode/{barcode}:
- *   get:
- *     summary: Get product by barcode
- *     tags: [Admin - Products]
- *     security:
- *       - BearerAuth: []
- *     parameters:
- *       - in: path
- *         name: barcode
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Product details
- *       404:
- *         description: Product not found
- */
-router.get('/getByBarcode/:barcode', adminAuth, productController.getByBarcode);
+router.get("/getById/:id", adminAuth, productController.getById);
 
 /**
  * @swagger
@@ -175,7 +153,12 @@ router.get('/getByBarcode/:barcode', adminAuth, productController.getByBarcode);
  *       401:
  *         description: Unauthorized
  */
-router.post('/create', adminAuth, uploadProductImages, productController.create);
+router.post(
+  "/create",
+  adminAuth,
+  uploadProductImages,
+  productController.create,
+);
 
 /**
  * @swagger
@@ -250,7 +233,12 @@ router.post('/create', adminAuth, uploadProductImages, productController.create)
  *       404:
  *         description: Product not found
  */
-router.put('/edit/:id', adminAuth, uploadProductImages, productController.update);
+router.put(
+  "/edit/:id",
+  adminAuth,
+  uploadProductImages,
+  productController.update,
+);
 
 /**
  * @swagger
@@ -276,6 +264,7 @@ router.put('/edit/:id', adminAuth, uploadProductImages, productController.update
  *       404:
  *         description: Product not found
  */
-router.delete('/delete/:id', adminAuth, productController.delete);
+router.delete("/delete/:id", adminAuth, productController.delete);
+router.patch("/publish/:id", adminAuth, productController.publish);
 
 export default router;

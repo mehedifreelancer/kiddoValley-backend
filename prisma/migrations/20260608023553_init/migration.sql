@@ -46,7 +46,6 @@ CREATE TABLE `products` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
     `slug` VARCHAR(191) NOT NULL,
-    `barcode` VARCHAR(191) NULL,
     `categoryId` INTEGER NOT NULL,
     `description` VARCHAR(191) NULL,
     `videoUrl` VARCHAR(191) NULL,
@@ -58,7 +57,6 @@ CREATE TABLE `products` (
     `updatedAt` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `products_slug_key`(`slug`),
-    UNIQUE INDEX `products_barcode_key`(`barcode`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -66,6 +64,7 @@ CREATE TABLE `products` (
 CREATE TABLE `variants` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `sku` VARCHAR(191) NOT NULL,
+    `barcode` VARCHAR(191) NULL,
     `productId` INTEGER NOT NULL,
     `attributes` JSON NOT NULL,
     `images` JSON NULL,
@@ -76,6 +75,7 @@ CREATE TABLE `variants` (
     `updatedAt` DATETIME(3) NOT NULL,
 
     UNIQUE INDEX `variants_sku_key`(`sku`),
+    UNIQUE INDEX `variants_barcode_key`(`barcode`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

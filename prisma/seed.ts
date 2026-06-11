@@ -41,12 +41,11 @@ async function main() {
   });
   console.log("✅ Category seeded");
 
-  // Product
+  // Product (no barcode)
   const product = await prisma.product.create({
     data: {
       name: "মীনা বই",
       slug: "mina-book",
-      barcode: "8901234567890",
       categoryId: category.id,
       description: "<p>মীনা ও তার বন্ধুদের গল্প</p>",
       images: [{ imgUrl: "https://picsum.photos/id/20/400/300" }],
@@ -55,10 +54,11 @@ async function main() {
   });
   console.log("✅ Product seeded");
 
-  // Variant (no sellingPrice)
+  // Variant (with barcode)
   const variant = await prisma.variant.create({
     data: {
       sku: "kdv-mina-book",
+      barcode: "8901234567890", // ✅ barcode on variant
       productId: product.id,
       attributes: {},
       isImported: false,
@@ -66,13 +66,13 @@ async function main() {
   });
   console.log("✅ Variant seeded");
 
-  // Stock (with sellingPrice)
+  // Stock
   const stock = await prisma.stock.create({
     data: {
       variantId: variant.id,
       batchNo: "1",
       buyingOrMakingPrice: 150,
-      sellingPrice: 200, // ✅ selling price at batch level
+      sellingPrice: 200,
       discountPercent: 0,
       currentQty: 100,
     },

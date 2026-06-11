@@ -36,6 +36,10 @@ const router = Router();
  *               attributes:
  *                 type: string
  *                 description: JSON string of attributes, e.g. {"color":"Red"}
+ *               barcode:
+ *                 type: string
+ *                 description: Optional unique barcode for this variant
+ *                 example: "8901234567890"
  *               isImported:
  *                 type: boolean
  *                 example: false
@@ -64,7 +68,7 @@ const router = Router();
  *       201:
  *         description: Variant created (and optional initial stock batch)
  *       400:
- *         description: Missing fields or SKU already exists
+ *         description: Missing fields or SKU/barcode already exists
  *       401:
  *         description: Unauthorized
  *       404:
@@ -96,6 +100,9 @@ router.post(
  *             properties:
  *               productId:
  *                 type: integer
+ *               barcode:
+ *                 type: string
+ *                 description: Optional barcode for the default variant
  *               isImported:
  *                 type: boolean
  *               countryOfOrigin:
@@ -111,6 +118,56 @@ router.post(
  *         description: Product not found
  */
 router.post("/create-default", adminAuth, variantController.createDefault);
+
+/**
+ * @swagger
+ * /api/admin/variant/{id}:
+ *   get:
+ *     summary: Get a single variant by ID (includes stocks)
+ *     tags: [Admin - Variant]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Variant details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     sku:
+ *                       type: string
+ *                     barcode:
+ *                       type: string
+ *                     attributes:
+ *                       type: object
+ *                     images:
+ *                       type: array
+ *                     isImported:
+ *                       type: boolean
+ *                     countryOfOrigin:
+ *                       type: string
+ *                     stocks:
+ *                       type: array
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Variant not found
+ */
+router.get("/:id", adminAuth, variantController.getOne);
 
 /**
  * @swagger
@@ -138,7 +195,7 @@ router.get("/product/:productId", adminAuth, variantController.getByProduct);
  * @swagger
  * /api/admin/variant/{id}:
  *   put:
- *     summary: Update a variant (attributes, imported flag, country)
+ *     summary: Update a variant (attributes, imported flag, country, barcode, and images)
  *     tags: [Admin - Variant]
  *     security:
  *       - BearerAuth: []
@@ -149,26 +206,47 @@ router.get("/product/:productId", adminAuth, variantController.getByProduct);
  *         schema:
  *           type: integer
  *     requestBody:
+ *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             properties:
  *               attributes:
- *                 type: object
+ *                 type: string
+ *                 description: JSON string of attributes
+ *               barcode:
+ *                 type: string
+ *                 description: New barcode (must be unique)
  *               isImported:
  *                 type: boolean
  *               countryOfOrigin:
  *                 type: string
+ *               existingImages:
+ *                 type: string
+ *                 description: JSON string array of existing image objects (e.g., [{"imgUrl":"..."}])
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: New images to upload (max 3)
  *     responses:
  *       200:
  *         description: Variant updated
+ *       400:
+ *         description: Barcode already exists or invalid data
  *       401:
  *         description: Unauthorized
  *       404:
  *         description: Variant not found
  */
-router.put("/:id", adminAuth, variantController.update);
+router.put(
+  "/:id",
+  adminAuth,
+  upload.fields([{ name: "images", maxCount: 3 }]),
+  variantController.update,
+);
 
 /**
  * @swagger

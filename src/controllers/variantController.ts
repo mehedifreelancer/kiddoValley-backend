@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { saveImagesToDisk } from "../multer";
 import path from "path";
 import { deleteFiles } from "../utils/fileUtils";
+import fs from "fs";
 
 function slugify(text: string): string {
   return text
@@ -16,14 +17,13 @@ function generateVariantSku(
   attributes: Record<string, string>,
 ): string {
   const base = `kdv-${productSlug}`;
-  const attrPart = Object.values(attributes)
-    .map((v) => slugify(v))
-    .join("-");
+  // Sort attribute keys alphabetically for consistent order
+  const sortedKeys = Object.keys(attributes).sort();
+  const attrPart = sortedKeys.map((key) => slugify(attributes[key])).join("-");
   return attrPart ? `${base}-${attrPart}` : base;
 }
 
 export const variantController = {
-  // Create a new variant (with optional images, isImported)
   async create(req: Request, res: Response) {
     let savedFilenames: string[] = [];
 
@@ -33,6 +33,7 @@ export const variantController = {
         attributes,
         isImported,
         countryOfOrigin,
+        barcode,
         buyingPrice,
         sellingPrice,
         discountPercent,
@@ -76,7 +77,17 @@ export const variantController = {
           .json({ success: false, message: "Variant SKU already exists" });
       }
 
-      // Save variant images (max 3)
+      if (barcode) {
+        const existingBarcode = await prisma.variant.findUnique({
+          where: { barcode: barcode as string },
+        });
+        if (existingBarcode) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Barcode already exists" });
+        }
+      }
+
       let finalImages: any[] = [];
       if (files && files.length > 0) {
         savedFilenames = saveImagesToDisk(files);
@@ -89,6 +100,7 @@ export const variantController = {
         const variant = await tx.variant.create({
           data: {
             sku,
+            barcode: barcode || null,
             productId: productIdNum,
             attributes: parsedAttributes,
             images: finalImages.length ? finalImages : undefined,
@@ -97,7 +109,6 @@ export const variantController = {
           },
         });
 
-        // Placeholder manufacture record
         await tx.manufacture.create({
           data: {
             productId: productIdNum,
@@ -109,7 +120,6 @@ export const variantController = {
           },
         });
 
-        // Optional initial stock batch
         if (
           buyingPrice &&
           sellingPrice &&
@@ -144,10 +154,9 @@ export const variantController = {
     }
   },
 
-  // Create a default variant (no attributes)
   async createDefault(req: Request, res: Response) {
     try {
-      const { productId, isImported, countryOfOrigin } = req.body;
+      const { productId, isImported, countryOfOrigin, barcode } = req.body;
       if (!productId) {
         return res
           .status(400)
@@ -177,10 +186,22 @@ export const variantController = {
           .json({ success: false, message: "Default variant already exists" });
       }
 
+      if (barcode) {
+        const existingBarcode = await prisma.variant.findUnique({
+          where: { barcode },
+        });
+        if (existingBarcode) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Barcode already exists" });
+        }
+      }
+
       await prisma.$transaction(async (tx) => {
         const variant = await tx.variant.create({
           data: {
             sku,
+            barcode: barcode || null,
             productId: productIdNum,
             attributes: {},
             isImported: isImported === true || isImported === "true",
@@ -208,7 +229,6 @@ export const variantController = {
     }
   },
 
-  // Get all variants of a product (including their stock batches)
   async getByProduct(req: Request, res: Response) {
     try {
       const productId = parseInt(req.params.productId);
@@ -223,7 +243,27 @@ export const variantController = {
     }
   },
 
-  // ✅ UPDATED: Update variant with proper image merging – NEVER wipe unless intended
+  async getOne(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid ID" });
+      }
+      const variant = await prisma.variant.findUnique({
+        where: { id },
+        include: { stocks: true },
+      });
+      if (!variant) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Variant not found" });
+      }
+      res.json({ success: true, data: variant });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
   async update(req: Request, res: Response) {
     let savedFilenames: string[] = [];
     try {
@@ -233,32 +273,42 @@ export const variantController = {
 
       const { attributes, isImported, countryOfOrigin, existingImages } =
         req.body;
-      const files = req.files as Express.Multer.File[];
 
+      // Normalize files (supports both upload.array and upload.fields)
+      let files: Express.Multer.File[] = [];
+      if (req.files) {
+        if (Array.isArray(req.files)) {
+          files = req.files;
+        } else if (req.files.images) {
+          files = req.files.images;
+        }
+      }
+
+      // Fetch variant with product (needed for SKU generation)
       const existingVariant = await prisma.variant.findUnique({
         where: { id },
+        include: { product: true },
       });
       if (!existingVariant)
         return res
           .status(404)
           .json({ success: false, message: "Variant not found" });
 
-      // ---------- IMAGE MERGING STRATEGY ----------
-      // 1. Start with the current images in database (ensure it's an array)
-      let finalImages: any[] = Array.isArray(existingVariant.images)
-        ? (existingVariant.images as any[])
+      // ---------- IMAGE HANDLING ----------
+      const currentImages = Array.isArray(existingVariant.images)
+        ? existingVariant.images
         : [];
-
-      // 2. If the client sent an `existingImages` field, replace the list with that
+      let finalImages: any[] = [];
       if (existingImages !== undefined) {
         const parsed =
           typeof existingImages === "string"
             ? JSON.parse(existingImages)
             : existingImages;
         finalImages = Array.isArray(parsed) ? parsed : [];
+      } else {
+        finalImages = [...currentImages];
       }
 
-      // 3. Add any newly uploaded files
       if (files && files.length > 0) {
         savedFilenames = saveImagesToDisk(files);
         const newUrls = savedFilenames.map((filename) => ({
@@ -267,16 +317,56 @@ export const variantController = {
         finalImages.push(...newUrls);
       }
 
+      // Delete orphaned image files
+      const oldUrls = currentImages.map((img: any) => img.imgUrl);
+      const newUrlsList = finalImages.map((img) => img.imgUrl);
+      const removedUrls = oldUrls.filter((url) => !newUrlsList.includes(url));
+      for (const url of removedUrls) {
+        const filename = url.split("/").pop();
+        if (filename) {
+          const filePath = path.join(
+            process.cwd(),
+            "public/uploads/product-images",
+            filename,
+          );
+          try {
+            fs.unlinkSync(filePath);
+          } catch (err) {
+            console.warn("Failed to delete orphan image:", filename);
+          }
+        }
+      }
+
+      // ---------- UPDATE DATA ----------
       const updateData: any = {};
+      let attributesChanged = false;
       if (attributes !== undefined) {
-        updateData.attributes =
+        const parsedAttrs =
           typeof attributes === "string" ? JSON.parse(attributes) : attributes;
+        updateData.attributes = parsedAttrs;
+        attributesChanged = true;
       }
       if (isImported !== undefined)
         updateData.isImported = isImported === true || isImported === "true";
       if (countryOfOrigin !== undefined)
         updateData.countryOfOrigin = countryOfOrigin;
-      updateData.images = finalImages; // always set (may be the same as before or modified)
+      updateData.images = finalImages;
+
+      // ✅ Regenerate SKU if attributes changed
+      if (attributesChanged) {
+        const product = existingVariant.product;
+        const newSku = generateVariantSku(product.slug, updateData.attributes);
+        // Check uniqueness (skip if the new SKU is already used by another variant)
+        const existingSku = await prisma.variant.findUnique({
+          where: { sku: newSku },
+        });
+        if (!existingSku || existingSku.id === id) {
+          updateData.sku = newSku;
+        } else {
+          // Fallback: add timestamp (extremely rare)
+          updateData.sku = `${newSku}-${Date.now()}`;
+        }
+      }
 
       const updated = await prisma.variant.update({
         where: { id },
@@ -294,30 +384,56 @@ export const variantController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-  // Delete variant (only if no stock batches)
+
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid ID" });
+      }
+
       const variant = await prisma.variant.findUnique({
         where: { id },
         include: { stocks: true },
       });
-      if (!variant)
+      if (!variant) {
         return res
           .status(404)
           .json({ success: false, message: "Variant not found" });
+      }
       if (variant.stocks.some((s) => s.currentQty > 0)) {
         return res.status(400).json({
           success: false,
           message: "Cannot delete variant with existing stock",
         });
       }
+
+      // Delete images from disk
+      const images = variant.images as any[];
+      if (images && images.length > 0) {
+        for (const img of images) {
+          const filename = img.imgUrl.split("/").pop();
+          if (filename) {
+            const filePath = path.join(
+              process.cwd(),
+              "public/uploads/product-images",
+              filename,
+            );
+            try {
+              fs.unlinkSync(filePath);
+            } catch (err) {}
+          }
+        }
+      }
+
       await prisma.$transaction([
         prisma.manufacture.deleteMany({ where: { variantId: id } }),
         prisma.variant.delete({ where: { id } }),
       ]);
+
       res.json({ success: true, message: "Variant deleted" });
     } catch (error: any) {
+      console.error("Delete variant error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },

@@ -119,7 +119,7 @@ export const categoryController = {
             select: {
               id: true,
               name: true,
-              barcode: true,
+              // barcode removed (moved to variant)
               isForceOrder: true,
               // sellingPrice removed (now in Stock table)
             },
@@ -159,9 +159,9 @@ export const categoryController = {
             select: {
               id: true,
               name: true,
-              barcode: true,
               slug: true,
               isForceOrder: true,
+              // barcode removed (moved to variant)
               // sellingPrice removed
             },
           },

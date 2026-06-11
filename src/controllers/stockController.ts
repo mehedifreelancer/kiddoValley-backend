@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 
 export const stockController = {
-  // Check SKU uniqueness (actually checks variant SKU)
   async checkSku(req: Request, res: Response) {
     const { sku } = req.query;
     if (!sku)
@@ -13,7 +12,6 @@ export const stockController = {
     res.json({ success: true, exists: !!existing });
   },
 
-  // Create a new stock batch for a variant (called "add stock")
   async createStock(req: Request, res: Response) {
     try {
       const {
@@ -22,13 +20,18 @@ export const stockController = {
         buyingOrMakingPrice,
         sellingPrice,
         discountPercent,
-        quantity,
+        quantity, // now optional
       } = req.body;
 
-      if (!variantId || !buyingOrMakingPrice || !sellingPrice || !quantity) {
+      // Quantity is no longer required; we only require variantId, buyingPrice, sellingPrice
+      if (!variantId || !buyingOrMakingPrice || !sellingPrice) {
         return res
           .status(400)
-          .json({ success: false, message: "Missing required fields" });
+          .json({
+            success: false,
+            message:
+              "Missing required fields (variantId, buyingOrMakingPrice, sellingPrice)",
+          });
       }
 
       const variant = await prisma.variant.findUnique({
@@ -39,16 +42,20 @@ export const stockController = {
           .status(404)
           .json({ success: false, message: "Variant not found" });
 
-      // Optional: check if batchNo already exists for this variant
-      const existingBatch = await prisma.stock.findFirst({
-        where: { variantId, batchNo },
-      });
-      if (existingBatch) {
-        return res.status(400).json({
-          success: false,
-          message: "Batch number already exists for this variant",
+      // Optional batchNo uniqueness check
+      if (batchNo) {
+        const existingBatch = await prisma.stock.findFirst({
+          where: { variantId, batchNo },
         });
+        if (existingBatch) {
+          return res.status(400).json({
+            success: false,
+            message: "Batch number already exists for this variant",
+          });
+        }
       }
+
+      const stockQuantity = quantity && quantity > 0 ? quantity : 0;
 
       const newStock = await prisma.stock.create({
         data: {
@@ -57,21 +64,23 @@ export const stockController = {
           buyingOrMakingPrice,
           sellingPrice,
           discountPercent: discountPercent || 0,
-          currentQty: quantity,
+          currentQty: stockQuantity,
         },
       });
 
-      // Log movement
-      await prisma.stockMovement.create({
-        data: {
-          stockId: newStock.id,
-          productId: variant.productId,
-          type: "PURCHASE",
-          quantity,
-          reason: "Stock addition",
-          createdBy: (req as any).admin?.id,
-        },
-      });
+      // Only create stock movement if actual stock was added (quantity > 0)
+      if (stockQuantity > 0) {
+        await prisma.stockMovement.create({
+          data: {
+            stockId: newStock.id,
+            productId: variant.productId,
+            type: "PURCHASE",
+            quantity: stockQuantity,
+            reason: "Stock addition",
+            createdBy: (req as any).admin?.id,
+          },
+        });
+      }
 
       res.status(201).json({ success: true, data: newStock });
     } catch (error: any) {
@@ -79,8 +88,6 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-
-  // Reduce stock from a specific batch
   async reduceStock(req: Request, res: Response) {
     try {
       const { stockId, quantity, reason, saleId } = req.body;
@@ -134,7 +141,6 @@ export const stockController = {
     }
   },
 
-  // Change selling price – creates a new stock batch (new batchNo)
   async changeSellingPrice(req: Request, res: Response) {
     try {
       const { stockId, newSellingPrice, newBuyingPrice, reason } = req.body;
@@ -153,7 +159,6 @@ export const stockController = {
           .status(404)
           .json({ success: false, message: "Stock not found" });
 
-      // Increment batch number
       let nextBatchNo = "1";
       const match = oldStock.batchNo.match(/^(\d+)/);
       if (match) {
@@ -169,7 +174,7 @@ export const stockController = {
           buyingOrMakingPrice: newBuyingPrice ?? oldStock.buyingOrMakingPrice,
           sellingPrice: newSellingPrice,
           discountPercent: oldStock.discountPercent,
-          currentQty: 0, // new batch starts empty; user can add quantity later
+          currentQty: 0,
         },
       });
 
@@ -196,7 +201,6 @@ export const stockController = {
     }
   },
 
-  // Get all stock batches for a specific variant
   async getStocksByVariant(req: Request, res: Response) {
     try {
       const variantId = parseInt(req.params.variantId);
@@ -210,7 +214,6 @@ export const stockController = {
     }
   },
 
-  // Get all stock batches for a product (aggregates all variants of that product)
   async getStocksByProduct(req: Request, res: Response) {
     try {
       const productId = parseInt(req.params.productId);
@@ -234,7 +237,6 @@ export const stockController = {
     }
   },
 
-  // Nested stock listing: Product → Variant → Stock (batch)
   async getNestedStockList(req: Request, res: Response) {
     try {
       const products = await prisma.product.findMany({
@@ -251,7 +253,6 @@ export const stockController = {
         product: {
           id: product.id,
           name: product.name,
-          barcode: product.barcode,
         },
         totalStock: product.variants.reduce(
           (sum, v) => sum + v.stocks.reduce((s, b) => s + b.currentQty, 0),
@@ -260,6 +261,7 @@ export const stockController = {
         variants: product.variants.map((variant) => ({
           id: variant.id,
           sku: variant.sku,
+          barcode: variant.barcode, // variant barcode
           attributes: variant.attributes,
           totalVariantStock: variant.stocks.reduce(
             (s, b) => s + b.currentQty,
@@ -284,7 +286,6 @@ export const stockController = {
     }
   },
 
-  // Legacy: simple product stock list (non‑nested)
   async getProductStockList(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -298,10 +299,7 @@ export const stockController = {
 
       let productWhere: any = {};
       if (search) {
-        productWhere.OR = [
-          { name: { contains: search } },
-          { barcode: { contains: search } },
-        ];
+        productWhere.OR = [{ name: { contains: search } }];
       }
       if (categoryId) productWhere.categoryId = categoryId;
 
@@ -324,7 +322,6 @@ export const stockController = {
         )[0];
         return {
           id: p.id,
-          barcode: p.barcode,
           name: p.name,
           images: p.images,
           category_id: p.categoryId,
@@ -351,7 +348,6 @@ export const stockController = {
     }
   },
 
-  // Advanced filter (simplified SQL with stock aggregates)
   async advancedFilter(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -373,8 +369,8 @@ export const stockController = {
       const params: any[] = [];
 
       if (search) {
-        conditions.push(`(p.name LIKE ? OR p.barcode LIKE ?)`);
-        params.push(`%${search}%`, `%${search}%`);
+        conditions.push(`(p.name LIKE ?)`);
+        params.push(`%${search}%`);
       }
       if (categoryId) {
         conditions.push(`p.category_id = ?`);
@@ -390,7 +386,6 @@ export const stockController = {
       const query = `
         SELECT 
           p.id,
-          p.barcode,
           p.name,
           p.images,
           p.category_id,
@@ -409,7 +404,7 @@ export const stockController = {
         LEFT JOIN stocks s ON s.variant_id = v.id
         LEFT JOIN categories c ON p.category_id = c.id
         ${whereClause}
-        GROUP BY p.id, p.barcode, p.name, p.images, p.category_id, c.name
+        GROUP BY p.id, p.name, p.images, p.category_id, c.name
         ${orderClause}
         LIMIT ? OFFSET ?
       `;

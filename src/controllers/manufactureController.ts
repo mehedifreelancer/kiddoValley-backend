@@ -32,11 +32,8 @@ export const manufactureController = {
         if (defaultVariant) {
           targetVariantId = defaultVariant.id;
         } else {
-          const product = await prisma.product.findUnique({
-            where: { id: productId },
-          });
-          if (!product) throw new Error("Product not found");
-          const defaultSku = product.barcode || `PROD-${productId}`;
+          // No default variant exists – create one using a simple SKU
+          const defaultSku = `PROD-${productId}`;
           const newVariant = await prisma.variant.create({
             data: { sku: defaultSku, productId, attributes: {} },
           });
@@ -106,7 +103,7 @@ export const manufactureController = {
       const manufactures = await prisma.manufacture.findMany({
         where,
         include: {
-          product: { select: { name: true, barcode: true } }, // ✅ now works
+          product: { select: { name: true } }, // barcode removed
         },
         orderBy: { manufactureDate: "desc" },
       });
@@ -121,7 +118,7 @@ export const manufactureController = {
       const id = parseInt(req.params.id);
       const manufacture = await prisma.manufacture.findUnique({
         where: { id },
-        include: { product: true }, // ✅ now works
+        include: { product: true }, // product no longer has barcode, safe
       });
       if (!manufacture)
         return res.status(404).json({ success: false, message: "Not found" });

@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { productController } from '../../controllers/productController';
+import { Router } from "express";
+import { productController } from "../../controllers/productController";
 
 const router = Router();
 
@@ -43,27 +43,7 @@ const router = Router();
  *       200:
  *         description: List of products with pagination
  */
-router.get('/products', productController.getAllPublic);
-
-/**
- * @swagger
- * /api/public/product/barcode/{barcode}:
- *   get:
- *     summary: Get product by barcode (for scanning)
- *     tags: [Public - Products]
- *     parameters:
- *       - in: path
- *         name: barcode
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Product details
- *       404:
- *         description: Product not found
- */
-router.get('/product/barcode/:barcode', productController.getByBarcode);
+router.get("/products", productController.getAllPublic);
 
 /**
  * @swagger
@@ -83,7 +63,7 @@ router.get('/product/barcode/:barcode', productController.getByBarcode);
  *       404:
  *         description: Product not found
  */
-router.get('/product/:slug', productController.getBySlug);
+router.get("/product/:slug", productController.getBySlug);
 
 /**
  * @swagger
@@ -95,6 +75,6 @@ router.get('/product/:slug', productController.getBySlug);
  *       200:
  *         description: List of force order products
  */
-router.get('/products/force-order', productController.getForceOrder);
+router.get("/products/force-order", productController.getForceOrder);
 
 export default router;

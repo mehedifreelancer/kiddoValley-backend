@@ -47,7 +47,6 @@ model Product {
   id                 Int      @id @default(autoincrement())
   name               String
   slug               String   @unique
-  barcode            String?  @unique
   categoryId         Int
   category           Category @relation(fields: [categoryId], references: [id])
   description        String?
@@ -61,7 +60,7 @@ model Product {
 
   variants     Variant[]
   suppliers    ProductSupplier[]
-  manufactures Manufacture[] // relation to Manufacture
+  manufactures Manufacture[]
 
   @@map("products")
 }
@@ -69,17 +68,18 @@ model Product {
 model Variant {
   id              Int      @id @default(autoincrement())
   sku             String   @unique
+  barcode         String?  @unique // ✅ moved from Product
   productId       Int
   product         Product  @relation(fields: [productId], references: [id])
-  attributes      Json // e.g., { "color": "Red" }
-  images          Json? // up to 3 images
+  attributes      Json
+  images          Json?
   isImported      Boolean  @default(false)
   countryOfOrigin String?
-  manufactureId   Int? // optional link to Manufacture
+  manufactureId   Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  stocks Stock[] // all batches of this variant
+  stocks Stock[]
 
   @@map("variants")
 }
@@ -106,11 +106,11 @@ model StockMovement {
   id          Int      @id @default(autoincrement())
   stockId     Int
   stock       Stock    @relation(fields: [stockId], references: [id])
-  productId   Int // denormalized for faster queries
-  type        String // PURCHASE, SALE, ADJUSTMENT, PRICE_CHANGE
-  quantity    Int // positive = add, negative = remove
+  productId   Int
+  type        String
+  quantity    Int
   reason      String?
-  referenceId Int? // saleId or other reference
+  referenceId Int?
   createdAt   DateTime @default(now())
   createdBy   Int?
 
@@ -141,11 +141,11 @@ model SoldItem {
   saleId     Int
   sale       Sale     @relation(fields: [saleId], references: [id])
   productId  Int
-  variantId  Int? // optional for reporting
+  variantId  Int?
   stockId    Int
   stock      Stock    @relation(fields: [stockId], references: [id])
   quantity   Int
-  unitPrice  Float // selling price at the time of sale
+  unitPrice  Float
   totalPrice Float
   createdAt  DateTime @default(now())
 
@@ -195,9 +195,9 @@ model Manufacture {
   id              Int      @id @default(autoincrement())
   productId       Int
   product         Product  @relation(fields: [productId], references: [id])
-  variantId       Int? // which variant this manufacture produced
+  variantId       Int?
   totalQuantity   Int
-  costComponents  Json? // breakdown of costs
+  costComponents  Json?
   notes           String?
   totalCost       Float
   unitCost        Float

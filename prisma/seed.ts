@@ -41,9 +41,11 @@ async function main() {
   });
   console.log("✅ Category seeded");
 
-  // Product (no barcode)
-  const product = await prisma.product.create({
-    data: {
+  // Product (use upsert to avoid duplicate slug)
+  const product = await prisma.product.upsert({
+    where: { slug: "mina-book" },
+    update: {},
+    create: {
       name: "মীনা বই",
       slug: "mina-book",
       categoryId: category.id,
@@ -54,11 +56,13 @@ async function main() {
   });
   console.log("✅ Product seeded");
 
-  // Variant (with barcode)
-  const variant = await prisma.variant.create({
-    data: {
+  // Variant (use upsert to avoid duplicate SKU)
+  const variant = await prisma.variant.upsert({
+    where: { sku: "kdv-mina-book" },
+    update: {},
+    create: {
       sku: "kdv-mina-book",
-      barcode: "8901234567890", // ✅ barcode on variant
+      barcode: "8901234567890",
       productId: product.id,
       attributes: {},
       isImported: false,
@@ -66,30 +70,36 @@ async function main() {
   });
   console.log("✅ Variant seeded");
 
-  // Stock
-  const stock = await prisma.stock.create({
-    data: {
-      variantId: variant.id,
-      batchNo: "1",
-      buyingOrMakingPrice: 150,
-      sellingPrice: 200,
-      discountPercent: 0,
-      currentQty: 100,
-    },
+  // Stock – check existence to avoid duplicate creation and movement
+  const existingStock = await prisma.stock.findFirst({
+    where: { variantId: variant.id, batchNo: "1" },
   });
-  console.log("✅ Stock seeded");
+  if (!existingStock) {
+    const stock = await prisma.stock.create({
+      data: {
+        variantId: variant.id,
+        batchNo: "1",
+        buyingOrMakingPrice: 150,
+        sellingPrice: 200,
+        discountPercent: 0,
+        currentQty: 100,
+      },
+    });
+    console.log("✅ Stock seeded");
 
-  // Stock Movement
-  await prisma.stockMovement.create({
-    data: {
-      stockId: stock.id,
-      productId: product.id,
-      type: "PURCHASE",
-      quantity: 100,
-      reason: "Initial stock",
-    },
-  });
-  console.log("✅ StockMovement seeded");
+    await prisma.stockMovement.create({
+      data: {
+        stockId: stock.id,
+        productId: product.id,
+        type: "PURCHASE",
+        quantity: 100,
+        reason: "Initial stock",
+      },
+    });
+    console.log("✅ StockMovement seeded");
+  } else {
+    console.log("⚠️ Stock already exists, skipping");
+  }
 
   // Attributes
   await prisma.productAttribute.upsert({

@@ -20,27 +20,58 @@ export const stockController = {
         buyingOrMakingPrice,
         sellingPrice,
         discountPercent,
-        quantity, // now optional
+        quantity,
       } = req.body;
 
-      // Quantity is no longer required; we only require variantId, buyingPrice, sellingPrice
-      if (!variantId || !buyingOrMakingPrice || !sellingPrice) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Missing required fields (variantId, buyingOrMakingPrice, sellingPrice)",
-          });
+      // Require only variantId, buyingOrMakingPrice, sellingPrice
+      if (!variantId || buyingOrMakingPrice === undefined || sellingPrice === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
+        });
+      }
+
+      // Validate positive values
+      if (buyingOrMakingPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Buying price must be greater than 0",
+        });
+      }
+      if (sellingPrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "MRP must be greater than 0",
+        });
+      }
+      // discountPercent is optional – default to 0
+      const finalDiscount = discountPercent !== undefined ? discountPercent : 0;
+      if (finalDiscount < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Discount cannot be negative",
+        });
       }
 
       const variant = await prisma.variant.findUnique({
         where: { id: variantId },
       });
       if (!variant)
-        return res
-          .status(404)
-          .json({ success: false, message: "Variant not found" });
+        return res.status(404).json({ success: false, message: "Variant not found" });
+
+      // Uniqueness check for buying price (prevent duplicate buying price per variant)
+      const existingStock = await prisma.stock.findFirst({
+        where: {
+          variantId: variant.id,
+          buyingOrMakingPrice: buyingOrMakingPrice,
+        },
+      });
+      if (existingStock) {
+        return res.status(400).json({
+          success: false,
+          message: `A price set with buying price ${buyingOrMakingPrice} already exists for this variant. Please use a different buying price.`,
+        });
+      }
 
       // Optional batchNo uniqueness check
       if (batchNo) {
@@ -63,7 +94,7 @@ export const stockController = {
           batchNo: batchNo || "1",
           buyingOrMakingPrice,
           sellingPrice,
-          discountPercent: discountPercent || 0,
+          discountPercent: finalDiscount,
           currentQty: stockQuantity,
         },
       });
@@ -88,6 +119,7 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+
   async reduceStock(req: Request, res: Response) {
     try {
       const { stockId, quantity, reason, saleId } = req.body;
@@ -100,9 +132,7 @@ export const stockController = {
 
       const stock = await prisma.stock.findUnique({ where: { id: stockId } });
       if (!stock)
-        return res
-          .status(404)
-          .json({ success: false, message: "Stock not found" });
+        return res.status(404).json({ success: false, message: "Stock not found" });
       if (stock.currentQty < quantity) {
         return res.status(400).json({
           success: false,
@@ -155,9 +185,7 @@ export const stockController = {
         where: { id: stockId },
       });
       if (!oldStock)
-        return res
-          .status(404)
-          .json({ success: false, message: "Stock not found" });
+        return res.status(404).json({ success: false, message: "Stock not found" });
 
       let nextBatchNo = "1";
       const match = oldStock.batchNo.match(/^(\d+)/);
@@ -261,7 +289,7 @@ export const stockController = {
         variants: product.variants.map((variant) => ({
           id: variant.id,
           sku: variant.sku,
-          barcode: variant.barcode, // variant barcode
+          barcode: variant.barcode,
           attributes: variant.attributes,
           totalVariantStock: variant.stocks.reduce(
             (s, b) => s + b.currentQty,

@@ -5,6 +5,19 @@ import { prisma } from "../lib/prisma";
 import { deleteFiles, getImagePathsFromProduct } from "../utils/fileUtils";
 import { saveImagesToDisk } from "../multer";
 
+// Helper: ensure every variant has at least one stock (price set)
+async function validateAllVariantsHaveStock(productId: number): Promise<void> {
+  const variants = await prisma.variant.findMany({
+    where: { productId },
+    include: { stocks: { take: 1 } }, // we only need to know if at least one exists
+  });
+  const missingVariants = variants.filter(v => v.stocks.length === 0);
+  if (missingVariants.length > 0) {
+    const skus = missingVariants.map(v => v.sku).join(", ");
+    throw new Error(`Please add at least one price set for all variants before saving. Missing: ${skus}`);
+  }
+}
+
 export const productController = {
   // Get all products (public with pagination and search)
   async getAllPublic(req: Request, res: Response) {
@@ -157,9 +170,6 @@ export const productController = {
       });
     }
   },
-
-  // ⚠️ getByBarcode removed because barcode is now on Variant.
-  // Use variant service to find variant by barcode.
 
   // Get force order products
   async getForceOrder(req: Request, res: Response) {
@@ -384,6 +394,12 @@ export const productController = {
         updateData.images = existingProduct.images;
       }
 
+      // ===== NEW VALIDATION: Ensure all variants have at least one price set =====
+      // This applies only when the product is being published (isPublished true)
+      if (updateData.isPublished === true) {
+        await validateAllVariantsHaveStock(id);
+      }
+
       // Stock batch addition logic (unchanged, uses variantId)
       const {
         buyingOrMakingPrice: newBatchCost,
@@ -467,10 +483,40 @@ export const productController = {
         deleteFiles(paths);
       }
       console.error("Update product error:", error);
+      // Return user-friendly message for the price set validation
+      if (error.message && error.message.includes("price set")) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
       res.status(500).json({
         success: false,
         message: error.message || "Internal server error",
       });
+    }
+  },
+
+  // ==================== PUBLISH ====================
+  async publish(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid product ID" });
+      }
+
+      // ✅ Validate that all variants have at least one price set before publishing
+      await validateAllVariantsHaveStock(id);
+
+      const product = await prisma.product.update({
+        where: { id },
+        data: { isPublished: true },
+      });
+      res.json({ success: true, data: product, message: "Product published successfully" });
+    } catch (error: any) {
+      console.error("Publish error:", error);
+      // Return a clean, user‑friendly message
+      if (error.message && error.message.includes("price set")) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+      res.status(500).json({ success: false, message: error.message || "Failed to publish product" });
     }
   },
 
@@ -703,24 +749,6 @@ export const productController = {
       });
     } catch (error: any) {
       console.error("Advanced filter error:", error);
-      res.status(500).json({ success: false, message: error.message });
-    }
-  },
-  async publish(req: Request, res: Response) {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Invalid product ID" });
-      }
-      const product = await prisma.product.update({
-        where: { id },
-        data: { isPublished: true },
-      });
-      res.json({ success: true, data: product, message: "Product published" });
-    } catch (error: any) {
-      console.error("Publish error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },

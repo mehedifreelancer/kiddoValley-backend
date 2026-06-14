@@ -331,5 +331,5 @@ router.get("/list", adminAuth, stockController.getProductStockList);
  *         description: Filtered product list
  */
 router.get("/advanced-filter", adminAuth, stockController.advancedFilter);
-
+router.delete("/:id", adminAuth, stockController.deleteStock);
 export default router;

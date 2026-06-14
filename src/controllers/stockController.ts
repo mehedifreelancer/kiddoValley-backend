@@ -24,10 +24,15 @@ export const stockController = {
       } = req.body;
 
       // Require only variantId, buyingOrMakingPrice, sellingPrice
-      if (!variantId || buyingOrMakingPrice === undefined || sellingPrice === undefined) {
+      if (
+        !variantId ||
+        buyingOrMakingPrice === undefined ||
+        sellingPrice === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
+          message:
+            "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
         });
       }
 
@@ -57,7 +62,9 @@ export const stockController = {
         where: { id: variantId },
       });
       if (!variant)
-        return res.status(404).json({ success: false, message: "Variant not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Variant not found" });
 
       // Uniqueness check for buying price (prevent duplicate buying price per variant)
       const existingStock = await prisma.stock.findFirst({
@@ -132,7 +139,9 @@ export const stockController = {
 
       const stock = await prisma.stock.findUnique({ where: { id: stockId } });
       if (!stock)
-        return res.status(404).json({ success: false, message: "Stock not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
       if (stock.currentQty < quantity) {
         return res.status(400).json({
           success: false,
@@ -185,7 +194,9 @@ export const stockController = {
         where: { id: stockId },
       });
       if (!oldStock)
-        return res.status(404).json({ success: false, message: "Stock not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
 
       let nextBatchNo = "1";
       const match = oldStock.batchNo.match(/^(\d+)/);
@@ -454,6 +465,33 @@ export const stockController = {
       });
     } catch (error: any) {
       console.error("Advanced filter error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  async deleteStock(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ success: false, message: "Invalid ID" });
+      }
+      const stock = await prisma.stock.findUnique({ where: { id } });
+      if (!stock) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
+      }
+      if (stock.currentQty > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Cannot delete stock batch because it has quantity greater than 0. Please reduce stock to zero first.",
+        });
+      }
+      await prisma.stock.delete({ where: { id } });
+      res.json({ success: true, message: "Stock batch deleted" });
+    } catch (error: any) {
+      console.error("Delete stock error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },

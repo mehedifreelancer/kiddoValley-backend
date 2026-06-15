@@ -495,4 +495,82 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+  // In stockController.ts, add this method:
+  async getFlatStockList(req: Request, res: Response) {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const search = req.query.search as string;
+      const sortBy = (req.query.sortBy as string) || "currentQty";
+      const sortOrder = (req.query.sortOrder as string) || "desc"; // "asc" or "desc"
+
+      const skip = (page - 1) * limit;
+
+      // Build search condition
+      let where: any = {};
+      if (search) {
+        where.OR = [
+          { variant: { product: { name: { contains: search } } } },
+          { variant: { sku: { contains: search } } },
+          { variant: { barcode: { contains: search } } },
+        ];
+      }
+
+      // Get total count for pagination
+      const total = await prisma.stock.count({ where });
+
+      // Get paginated, sorted stocks
+      const stocks = await prisma.stock.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          [sortBy]: sortOrder,
+        },
+        include: {
+          variant: {
+            include: {
+              product: {
+                select: { name: true },
+              },
+            },
+          },
+        },
+      });
+
+      const formatted = stocks.map((stock) => ({
+        id: stock.id,
+        batchNo: stock.batchNo,
+        buyingPrice: stock.buyingOrMakingPrice,
+        sellingPrice: stock.sellingPrice,
+        discountPercent: stock.discountPercent,
+        currentQty: stock.currentQty,
+        createdAt: stock.createdAt,
+        variant: {
+          id: stock.variant.id,
+          sku: stock.variant.sku,
+          barcode: stock.variant.barcode,
+          attributes: stock.variant.attributes,
+          images: stock.variant.images,
+          isImported: stock.variant.isImported,
+          countryOfOrigin: stock.variant.countryOfOrigin,
+          productName: stock.variant.product.name,
+        },
+      }));
+
+      res.json({
+        success: true,
+        data: formatted,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      });
+    } catch (error: any) {
+      console.error("Get flat stock list error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 };

@@ -110,7 +110,7 @@ CREATE TABLE `stock_movements` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `sales` (
+CREATE TABLE `Order` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `invoiceNo` VARCHAR(191) NOT NULL,
     `subtotal` DOUBLE NOT NULL,
@@ -121,17 +121,20 @@ CREATE TABLE `sales` (
     `paymentStatus` VARCHAR(191) NOT NULL DEFAULT 'paid',
     `customerName` VARCHAR(191) NULL,
     `customerPhone` VARCHAR(191) NULL,
+    `customerPhone2` VARCHAR(191) NULL,
+    `customerAddress` VARCHAR(191) NULL,
+    `deliveryDate` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `sales_invoiceNo_key`(`invoiceNo`),
+    UNIQUE INDEX `Order_invoiceNo_key`(`invoiceNo`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `sold_items` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
-    `saleId` INTEGER NOT NULL,
+    `orderId` INTEGER NOT NULL,
     `productId` INTEGER NOT NULL,
     `variantId` INTEGER NULL,
     `stockId` INTEGER NOT NULL,
@@ -224,7 +227,7 @@ ALTER TABLE `stocks` ADD CONSTRAINT `stocks_variantId_fkey` FOREIGN KEY (`varian
 ALTER TABLE `stock_movements` ADD CONSTRAINT `stock_movements_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_saleId_fkey` FOREIGN KEY (`saleId`) REFERENCES `sales`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `Order`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

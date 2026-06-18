@@ -68,7 +68,7 @@ model Product {
 model Variant {
   id              Int      @id @default(autoincrement())
   sku             String   @unique
-  barcode         String?  @unique // ✅ moved from Product
+  barcode         String?  @unique
   productId       Int
   product         Product  @relation(fields: [productId], references: [id])
   attributes      Json
@@ -107,39 +107,40 @@ model StockMovement {
   stockId     Int
   stock       Stock    @relation(fields: [stockId], references: [id])
   productId   Int
-  type        String
-  quantity    Int
+  type        String // PURCHASE, SALE, ADJUSTMENT, PRICE_CHANGE, RETURN, WASTAGE, LOST, FOUND
+  quantity    Int // positive for addition, negative for removal
   reason      String?
-  referenceId Int?
+  referenceId Int? // orderId, purchaseId, etc.
   createdAt   DateTime @default(now())
-  createdBy   Int?
+  createdBy   Int? // admin user id
 
   @@map("stock_movements")
 }
 
-model Sale {
-  id            Int      @id @default(autoincrement())
-  invoiceNo     String   @unique
-  subtotal      Float
-  tax           Float?
-  discount      Float?
-  total         Float
-  paymentMode   String?
-  paymentStatus String   @default("paid")
-  customerName  String?
-  customerPhone String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+model Order {
+  id              Int       @id @default(autoincrement())
+  invoiceNo       String    @unique
+  subtotal        Float
+  tax             Float?
+  discount        Float?
+  total           Float
+  paymentMode     String?
+  paymentStatus   String    @default("paid")
+  customerName    String?
+  customerPhone   String?
+  customerPhone2  String?
+  customerAddress String?
+  deliveryDate    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   items SoldItem[]
-
-  @@map("sales")
 }
 
 model SoldItem {
   id         Int      @id @default(autoincrement())
-  saleId     Int
-  sale       Sale     @relation(fields: [saleId], references: [id])
+  orderId    Int
+  order      Order    @relation(fields: [orderId], references: [id])
   productId  Int
   variantId  Int?
   stockId    Int

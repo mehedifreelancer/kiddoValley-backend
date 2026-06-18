@@ -16,7 +16,7 @@ import adminStockRoutes from "./routes/admin/stock";
 import manufactureRoutes from "./routes/admin/manufactures";
 import attributeRoutes from "./routes/admin/attributes";
 import adminVariantRoutes from "./routes/admin/variant";
-
+import adminOrderRoutes from "./routes/admin/orders";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -97,6 +97,7 @@ app.use("/api/admin/stock", adminAuth, adminStockRoutes);
 app.use("/api/admin/manufactures", adminAuth, manufactureRoutes);
 app.use("/api/admin/attributes", adminAuth, attributeRoutes);
 app.use("/api/admin/variant", adminAuth, adminVariantRoutes);
+app.use("/api/admin/orders", adminAuth, adminOrderRoutes);
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({

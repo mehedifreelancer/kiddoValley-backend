@@ -23,20 +23,13 @@ export const stockController = {
         quantity,
       } = req.body;
 
-      // Require only variantId, buyingOrMakingPrice, sellingPrice
-      if (
-        !variantId ||
-        buyingOrMakingPrice === undefined ||
-        sellingPrice === undefined
-      ) {
+      if (!variantId || buyingOrMakingPrice === undefined || sellingPrice === undefined) {
         return res.status(400).json({
           success: false,
-          message:
-            "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
+          message: "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
         });
       }
 
-      // Validate positive values
       if (buyingOrMakingPrice <= 0) {
         return res.status(400).json({
           success: false,
@@ -49,7 +42,6 @@ export const stockController = {
           message: "MRP must be greater than 0",
         });
       }
-      // discountPercent is optional – default to 0
       const finalDiscount = discountPercent !== undefined ? discountPercent : 0;
       if (finalDiscount < 0) {
         return res.status(400).json({
@@ -62,11 +54,8 @@ export const stockController = {
         where: { id: variantId },
       });
       if (!variant)
-        return res
-          .status(404)
-          .json({ success: false, message: "Variant not found" });
+        return res.status(404).json({ success: false, message: "Variant not found" });
 
-      // Uniqueness check for buying price (prevent duplicate buying price per variant)
       const existingStock = await prisma.stock.findFirst({
         where: {
           variantId: variant.id,
@@ -80,7 +69,6 @@ export const stockController = {
         });
       }
 
-      // Optional batchNo uniqueness check
       if (batchNo) {
         const existingBatch = await prisma.stock.findFirst({
           where: { variantId, batchNo },
@@ -106,7 +94,6 @@ export const stockController = {
         },
       });
 
-      // Only create stock movement if actual stock was added (quantity > 0)
       if (stockQuantity > 0) {
         await prisma.stockMovement.create({
           data: {
@@ -139,9 +126,7 @@ export const stockController = {
 
       const stock = await prisma.stock.findUnique({ where: { id: stockId } });
       if (!stock)
-        return res
-          .status(404)
-          .json({ success: false, message: "Stock not found" });
+        return res.status(404).json({ success: false, message: "Stock not found" });
       if (stock.currentQty < quantity) {
         return res.status(400).json({
           success: false,
@@ -194,9 +179,7 @@ export const stockController = {
         where: { id: stockId },
       });
       if (!oldStock)
-        return res
-          .status(404)
-          .json({ success: false, message: "Stock not found" });
+        return res.status(404).json({ success: false, message: "Stock not found" });
 
       let nextBatchNo = "1";
       const match = oldStock.batchNo.match(/^(\d+)/);
@@ -477,9 +460,7 @@ export const stockController = {
       }
       const stock = await prisma.stock.findUnique({ where: { id } });
       if (!stock) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Stock not found" });
+        return res.status(404).json({ success: false, message: "Stock not found" });
       }
       if (stock.currentQty > 0) {
         return res.status(400).json({
@@ -495,44 +476,55 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-  // In stockController.ts, add this method:
+
+  // ✅ getFlatStockList with barcode exact‑match fix (no 'mode' – works in SQLite/MySQL)
   async getFlatStockList(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string;
       const sortBy = (req.query.sortBy as string) || "currentQty";
-      const sortOrder = (req.query.sortOrder as string) || "desc"; // "asc" or "desc"
+      const sortOrder = (req.query.sortOrder as string) === "asc" ? "asc" : "desc";
+      const onlyInStock = req.query.onlyInStock === "true";
 
       const skip = (page - 1) * limit;
 
-      // Build search condition
       let where: any = {};
+      if (onlyInStock) {
+        where.currentQty = { gt: 0 };
+      }
+
       if (search) {
+        const trimmed = search.trim();
         where.OR = [
-          { variant: { product: { name: { contains: search } } } },
-          { variant: { sku: { contains: search } } },
-          { variant: { barcode: { contains: search } } },
+          { batchNo: { contains: trimmed } },
+          { variant: { sku: { contains: trimmed } } },
+          // Barcode exact match (case‑sensitive, but barcodes are usually case‑insensitive; you can store them in uppercase)
+          { variant: { barcode: { equals: trimmed } } },
+          { variant: { product: { name: { contains: trimmed } } } },
         ];
       }
 
-      // Get total count for pagination
       const total = await prisma.stock.count({ where });
 
-      // Get paginated, sorted stocks
+      let orderBy: any = {};
+      if (sortBy === "variant.productName") {
+        orderBy = { variant: { product: { name: sortOrder } } };
+      } else if (sortBy === "variant.sku") {
+        orderBy = { variant: { sku: sortOrder } };
+      } else {
+        orderBy = { [sortBy]: sortOrder };
+      }
+
       const stocks = await prisma.stock.findMany({
         where,
         skip,
         take: limit,
-        orderBy: {
-          [sortBy]: sortOrder,
-        },
+        orderBy,
         include: {
           variant: {
             include: {
-              product: {
-                select: { name: true },
-              },
+              product: { select: { name: true } },
             },
           },
         },

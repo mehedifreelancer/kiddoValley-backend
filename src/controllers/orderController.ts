@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import pathaoService from "../services/pathao.service"; // ✅ import Pathao service
 
 function generateInvoiceNo(): string {
   return `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -137,9 +138,33 @@ export const orderController = {
         return order;
       });
 
-      // After successful order, you can call external services (WhatsApp, Pathao)
-      // await sendWhatsAppNotification(...);
-      // await createPathaoOrder(...);
+      // ✅ AFTER order is successfully created – create Pathao courier order (non‑blocking)
+      // We pass the order data to Pathao. If it fails, we log but don't stop the response.
+      const pathaoPayload = {
+        merchant_order_id: String(result.id),
+        recipient_name: customerName,
+        recipient_phone: customerPhone,
+        recipient_address: customerAddress,
+        delivery_type: 48, // Normal delivery
+        item_type: 2,      // Parcel
+        item_weight: 0.5,  // Default weight – you can calculate from items
+        amount_to_collect: total,
+        item_quantity: items.length,
+      };
+
+      // ⚠️ Hardcoded store ID from user input (8941100311400) – you can remove and use dynamic store fetch if needed.
+      // The service will fetch the store ID dynamically unless you override it.
+      // If you want to use a fixed store ID, modify the service or pass it here.
+      try {
+        const pathaoResult = await pathaoService.createOrder(pathaoPayload);
+        console.log("✅ Pathao order created:", pathaoResult.consignment_id);
+        // Optionally save consignment_id to the order record (if you add a column)
+        // await prisma.order.update({ where: { id: result.id }, data: { pathaoConsignmentId: pathaoResult.consignment_id } });
+      } catch (pathaoError: any) {
+        // Log error but DO NOT block the order response
+        console.error("❌ Pathao order creation failed (non-blocking):", pathaoError.message);
+        // You could also send a notification to admin about the failure.
+      }
 
       res.status(201).json({
         success: true,

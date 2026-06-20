@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import swaggerUi from "swagger-ui-express";
 import { prisma } from "./lib/prisma";
 import { swaggerSpec } from "./config/swagger";
+import emailRoutes from "./routes/public/email";
 
 // Import routes
 import adminCategoryRoutes from "./routes/admin/categories";
@@ -87,8 +88,7 @@ app.use(
 // Public routes
 app.use("/api/public", publicCategoryRoutes);
 app.use("/api/public", publicProductRoutes);
-
-// Admin routes
+app.use("/api/public/email", emailRoutes);// Admin routes
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin/categories", adminAuth, adminCategoryRoutes);
 app.use("/api/admin/products", adminAuth, adminProductRoutes);
@@ -98,6 +98,7 @@ app.use("/api/admin/manufactures", adminAuth, manufactureRoutes);
 app.use("/api/admin/attributes", adminAuth, attributeRoutes);
 app.use("/api/admin/variant", adminAuth, adminVariantRoutes);
 app.use("/api/admin/orders", adminAuth, adminOrderRoutes);
+
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({

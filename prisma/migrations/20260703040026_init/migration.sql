@@ -110,24 +110,44 @@ CREATE TABLE `stock_movements` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `CustomerInfo` (
+    `phone` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `address` VARCHAR(191) NOT NULL,
+    `secondaryPhone` VARCHAR(191) NULL,
+    `gender` VARCHAR(191) NULL,
+    `hasBaby` BOOLEAN NULL DEFAULT false,
+    `preferredToy` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `CustomerInfo_phone_key`(`phone`),
+    PRIMARY KEY (`phone`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `Order` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `invoiceNo` VARCHAR(191) NOT NULL,
     `subtotal` DOUBLE NOT NULL,
-    `tax` DOUBLE NULL,
-    `discount` DOUBLE NULL,
+    `discount` DOUBLE NOT NULL,
     `total` DOUBLE NOT NULL,
-    `paymentMode` VARCHAR(191) NULL,
-    `paymentStatus` VARCHAR(191) NOT NULL DEFAULT 'paid',
-    `customerName` VARCHAR(191) NULL,
-    `customerPhone` VARCHAR(191) NULL,
+    `customerName` VARCHAR(191) NOT NULL,
+    `customerPhone` VARCHAR(191) NOT NULL,
     `customerPhone2` VARCHAR(191) NULL,
-    `customerAddress` VARCHAR(191) NULL,
+    `customerAddress` VARCHAR(191) NOT NULL,
     `deliveryDate` DATETIME(3) NULL,
+    `paymentStatus` VARCHAR(191) NOT NULL DEFAULT 'pending',
+    `deliveryStatus` VARCHAR(191) NULL DEFAULT 'Pending',
+    `pathaoInvoiceId` VARCHAR(191) NULL,
+    `pathaoConsignmentId` VARCHAR(191) NULL,
+    `pathaoLastSyncedAt` DATETIME(3) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
+    `orderedByPhone` VARCHAR(191) NULL,
 
     UNIQUE INDEX `Order_invoiceNo_key`(`invoiceNo`),
+    UNIQUE INDEX `Order_pathaoConsignmentId_key`(`pathaoConsignmentId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -225,6 +245,9 @@ ALTER TABLE `stocks` ADD CONSTRAINT `stocks_variantId_fkey` FOREIGN KEY (`varian
 
 -- AddForeignKey
 ALTER TABLE `stock_movements` ADD CONSTRAINT `stock_movements_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Order` ADD CONSTRAINT `Order_orderedByPhone_fkey` FOREIGN KEY (`orderedByPhone`) REFERENCES `CustomerInfo`(`phone`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `Order`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

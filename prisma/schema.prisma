@@ -117,24 +117,41 @@ model StockMovement {
   @@map("stock_movements")
 }
 
-model Order {
-  id              Int       @id @default(autoincrement())
-  invoiceNo       String    @unique
-  subtotal        Float
-  tax             Float?
-  discount        Float?
-  total           Float
-  paymentMode     String?
-  paymentStatus   String    @default("paid")
-  customerName    String?
-  customerPhone   String?
-  customerPhone2  String?
-  customerAddress String?
-  deliveryDate    DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+model CustomerInfo {
+  phone          String   @id @unique
+  name           String
+  address        String
+  secondaryPhone String?
+  gender         String? // 'male', 'female', 'other'
+  hasBaby        Boolean? @default(false)
+  preferredToy   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  items SoldItem[]
+  orders Order[]
+}
+
+model Order {
+  id                  Int           @id @default(autoincrement())
+  invoiceNo           String        @unique
+  subtotal            Float
+  discount            Float
+  total               Float
+  customerName        String
+  customerPhone       String
+  customerPhone2      String?
+  customerAddress     String
+  deliveryDate        DateTime?
+  paymentStatus       String        @default("pending")
+  deliveryStatus      String?       @default("Pending") // 🆕 New field
+  pathaoInvoiceId     String? // 🆕 New field
+  pathaoConsignmentId String?       @unique
+  pathaoLastSyncedAt  DateTime? // 🆕 New field
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  soldItems           SoldItem[]
+  orderedByPhone      String? // foreign key to CustomerInfo.phone
+  customerInfo        CustomerInfo? @relation(fields: [orderedByPhone], references: [phone])
 }
 
 model SoldItem {

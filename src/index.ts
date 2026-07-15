@@ -5,6 +5,8 @@ import swaggerUi from "swagger-ui-express";
 import { prisma } from "./lib/prisma";
 import { swaggerSpec } from "./config/swagger";
 import emailRoutes from "./routes/public/email";
+import customerRoutes from "./routes/admin/customers";
+import supplierRoutes from "./routes/admin/suppliers";
 
 // Import routes
 import adminCategoryRoutes from "./routes/admin/categories";
@@ -89,7 +91,7 @@ app.use(
 // Public routes
 app.use("/api/public", publicCategoryRoutes);
 app.use("/api/public", publicProductRoutes);
-app.use("/api/public/email", emailRoutes);// Admin routes
+app.use("/api/public/email", emailRoutes); // Admin routes
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin/categories", adminAuth, adminCategoryRoutes);
 app.use("/api/admin/products", adminAuth, adminProductRoutes);
@@ -99,8 +101,9 @@ app.use("/api/admin/manufactures", adminAuth, manufactureRoutes);
 app.use("/api/admin/attributes", adminAuth, attributeRoutes);
 app.use("/api/admin/variant", adminAuth, adminVariantRoutes);
 app.use("/api/admin/orders", adminAuth, adminOrderRoutes);
-app.use("/api/admin/pathao", pathaoRoutes); 
-
+app.use("/api/admin/pathao", pathaoRoutes);
+app.use("/api/admin/customers", adminAuth, customerRoutes);
+app.use("/api/admin/suppliers", adminAuth, supplierRoutes);
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({

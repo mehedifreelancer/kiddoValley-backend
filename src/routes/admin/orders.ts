@@ -64,6 +64,22 @@ const router = Router();
  *       401:
  *         description: Unauthorized
  */
-router.post("/create", adminAuth, orderController.createOrder);
+// Confirm order (DB only)
+router.post("/confirm", adminAuth, orderController.confirmOrder);
+
+// Confirm & Pack (DB + Pathao + Email) – creates new order
+router.post("/confirm-and-pack", adminAuth, orderController.confirmAndPack);
+
+// Pack existing order (for orders without consignment)
+router.post("/:orderId/pack", adminAuth, orderController.packExistingOrder);
+
+// Reprint (get order data for printing)
+router.get("/:orderId/reprint", adminAuth, orderController.reprintOrder);
+
+// List orders
+router.get("/orders", adminAuth, orderController.getOrders);
+
+// Batch sync Pathao statuses
+router.post("/sync-statuses", adminAuth, orderController.syncPathaoStatuses);
 
 export default router;

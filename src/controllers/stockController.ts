@@ -23,6 +23,7 @@ export const stockController = {
         quantity,
       } = req.body;
 
+      // --- Existing validations (unchanged) ---
       if (
         !variantId ||
         buyingOrMakingPrice === undefined ||
@@ -63,6 +64,7 @@ export const stockController = {
           .status(404)
           .json({ success: false, message: "Variant not found" });
 
+      // --- Buying price uniqueness check (unchanged) ---
       const existingStock = await prisma.stock.findFirst({
         where: {
           variantId: variant.id,
@@ -76,9 +78,27 @@ export const stockController = {
         });
       }
 
-      if (batchNo) {
+      // --- Determine final batch number (NEW LOGIC) ---
+      let finalBatchNo: string;
+      const trimmedBatch = batchNo?.trim();
+
+      if (!trimmedBatch) {
+        // Auto‑generate: find the highest numeric batch number for this variant
+        const existingBatches = await prisma.stock.findMany({
+          where: { variantId },
+          select: { batchNo: true },
+        });
+
+        let maxNum = 0;
+        for (const stock of existingBatches) {
+          const num = parseInt(stock.batchNo, 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+        finalBatchNo = (maxNum + 1).toString();
+      } else {
+        // Batch number provided – check uniqueness (existing behaviour)
         const existingBatch = await prisma.stock.findFirst({
-          where: { variantId, batchNo },
+          where: { variantId, batchNo: trimmedBatch },
         });
         if (existingBatch) {
           return res.status(400).json({
@@ -86,14 +106,16 @@ export const stockController = {
             message: "Batch number already exists for this variant",
           });
         }
+        finalBatchNo = trimmedBatch;
       }
 
+      // --- Create stock (unchanged except using finalBatchNo) ---
       const stockQuantity = quantity && quantity > 0 ? quantity : 0;
 
       const newStock = await prisma.stock.create({
         data: {
           variantId,
-          batchNo: batchNo || "1",
+          batchNo: finalBatchNo,
           buyingOrMakingPrice,
           sellingPrice,
           discountPercent: finalDiscount,
@@ -101,6 +123,7 @@ export const stockController = {
         },
       });
 
+      // --- Stock movement (unchanged) ---
       if (stockQuantity > 0) {
         await prisma.stockMovement.create({
           data: {
@@ -120,7 +143,6 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-
   async reduceStock(req: Request, res: Response) {
     try {
       const { stockId, quantity, reason, saleId } = req.body;

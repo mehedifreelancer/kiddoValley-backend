@@ -333,4 +333,5 @@ router.get("/list", adminAuth, stockController.getProductStockList);
 router.get("/advanced-filter", adminAuth, stockController.advancedFilter);
 router.delete("/:id", adminAuth, stockController.deleteStock);
 router.get("/flat-list", adminAuth, stockController.getFlatStockList);
+router.post("/stock-in/create", adminAuth, stockController.stockIn);
 export default router;

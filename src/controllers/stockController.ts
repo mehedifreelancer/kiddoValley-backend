@@ -23,10 +23,15 @@ export const stockController = {
         quantity,
       } = req.body;
 
-      if (!variantId || buyingOrMakingPrice === undefined || sellingPrice === undefined) {
+      if (
+        !variantId ||
+        buyingOrMakingPrice === undefined ||
+        sellingPrice === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
+          message:
+            "Missing required fields: variantId, buyingOrMakingPrice, sellingPrice",
         });
       }
 
@@ -54,7 +59,9 @@ export const stockController = {
         where: { id: variantId },
       });
       if (!variant)
-        return res.status(404).json({ success: false, message: "Variant not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Variant not found" });
 
       const existingStock = await prisma.stock.findFirst({
         where: {
@@ -126,7 +133,9 @@ export const stockController = {
 
       const stock = await prisma.stock.findUnique({ where: { id: stockId } });
       if (!stock)
-        return res.status(404).json({ success: false, message: "Stock not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
       if (stock.currentQty < quantity) {
         return res.status(400).json({
           success: false,
@@ -179,7 +188,9 @@ export const stockController = {
         where: { id: stockId },
       });
       if (!oldStock)
-        return res.status(404).json({ success: false, message: "Stock not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
 
       let nextBatchNo = "1";
       const match = oldStock.batchNo.match(/^(\d+)/);
@@ -460,7 +471,9 @@ export const stockController = {
       }
       const stock = await prisma.stock.findUnique({ where: { id } });
       if (!stock) {
-        return res.status(404).json({ success: false, message: "Stock not found" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
       }
       if (stock.currentQty > 0) {
         return res.status(400).json({
@@ -484,7 +497,8 @@ export const stockController = {
       const limit = parseInt(req.query.limit as string) || 10;
       const search = req.query.search as string;
       const sortBy = (req.query.sortBy as string) || "currentQty";
-      const sortOrder = (req.query.sortOrder as string) === "asc" ? "asc" : "desc";
+      const sortOrder =
+        (req.query.sortOrder as string) === "asc" ? "asc" : "desc";
       const onlyInStock = req.query.onlyInStock === "true";
 
       const skip = (page - 1) * limit;
@@ -563,6 +577,86 @@ export const stockController = {
     } catch (error: any) {
       console.error("Get flat stock list error:", error);
       res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  // controllers/stockController.ts (add this method)
+
+  async stockIn(req: Request, res: Response) {
+    try {
+      const { supplierId, supplierName, stockInDate, items, subtotal, total } =
+        req.body;
+
+      // --- Basic validation ---
+      if (!supplierId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Supplier ID is required" });
+      }
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "At least one item is required" });
+      }
+
+      // Optional: more detailed validation (positive numbers, etc.)
+      for (const item of items) {
+        if (!item.stockId || !item.quantity || item.quantity <= 0) {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Each item must have a valid stockId and positive quantity",
+          });
+        }
+      }
+
+      const adminId = (req as any).admin?.id;
+
+      // --- Transaction: update all stocks and create movements ---
+      await prisma.$transaction(async (tx) => {
+        for (const item of items) {
+          const stock = await tx.stock.findUnique({
+            where: { id: item.stockId },
+            include: { variant: { select: { productId: true } } },
+          });
+
+          if (!stock) {
+            throw new Error(`Stock batch with ID ${item.stockId} not found`);
+          }
+
+          // Increase current quantity
+          await tx.stock.update({
+            where: { id: item.stockId },
+            data: { currentQty: { increment: item.quantity } },
+          });
+
+          // Record movement
+          await tx.stockMovement.create({
+            data: {
+              stockId: item.stockId,
+              productId: stock.variant.productId,
+              type: "PURCHASE", // or "STOCK_IN" if you prefer
+              quantity: item.quantity,
+              reason: `Stock in from supplier ${supplierName || `ID:${supplierId}`} on ${new Date(stockInDate).toLocaleString()}`,
+              referenceId: null,
+              createdBy: adminId,
+            },
+          });
+        }
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Stock‑in completed successfully",
+      });
+    } catch (error: any) {
+      console.error("Stock‑in error:", error);
+      if (error.message?.includes("not found")) {
+        return res.status(404).json({ success: false, message: error.message });
+      }
+      res
+        .status(500)
+        .json({ success: false, message: "Internal server error" });
     }
   },
 };

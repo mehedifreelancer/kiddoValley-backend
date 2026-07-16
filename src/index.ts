@@ -7,6 +7,7 @@ import { swaggerSpec } from "./config/swagger";
 import emailRoutes from "./routes/public/email";
 import customerRoutes from "./routes/admin/customers";
 import supplierRoutes from "./routes/admin/suppliers";
+import sliderRoutes from "./routes/admin/slider";
 
 // Import routes
 import adminCategoryRoutes from "./routes/admin/categories";
@@ -21,6 +22,7 @@ import attributeRoutes from "./routes/admin/attributes";
 import adminVariantRoutes from "./routes/admin/variant";
 import adminOrderRoutes from "./routes/admin/orders";
 import pathaoRoutes from "./routes/admin/pathao";
+import webSettingsRoutes from "./routes/admin/webSettings";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -104,6 +106,9 @@ app.use("/api/admin/orders", adminAuth, adminOrderRoutes);
 app.use("/api/admin/pathao", pathaoRoutes);
 app.use("/api/admin/customers", adminAuth, customerRoutes);
 app.use("/api/admin/suppliers", adminAuth, supplierRoutes);
+app.use("/api/admin/web-settings", adminAuth, webSettingsRoutes);
+app.use("/api/admin/sliders", adminAuth, sliderRoutes);
+
 // Health check
 app.get("/", (req: Request, res: Response) => {
   res.json({

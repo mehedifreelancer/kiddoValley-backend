@@ -209,6 +209,18 @@ model Setting {
   @@map("settings")
 }
 
+model SliderImage {
+  id         Int      @id @default(autoincrement())
+  deviceType String // 'desktop' or 'mobile'
+  imageUrl   String
+  order      Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("slider_images")
+}
+
 model Manufacture {
   id              Int      @id @default(autoincrement())
   productId       Int

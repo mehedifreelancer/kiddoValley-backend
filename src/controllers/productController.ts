@@ -21,13 +21,10 @@ async function validateAllVariantsHaveStock(productId: number): Promise<void> {
   }
 }
 
-// ---------- NEW: Transform for public API with variants array ----------
-// productController.ts
-
+// ---------- Transform for public API ----------
 function transformProductForPublic(product: any) {
   const thumbnailImage = product.thumbnail || null;
 
-  // ✅ ভেরিয়েন্টে attributes রাখো – এটি কার্ডে ক্লিক হ্যান্ডেল করার জন্য আবশ্যক
   const variants = (product.variants || []).map((variant: any) => {
     const firstStock = variant.stocks?.[0] || {};
     const totalStock =
@@ -49,11 +46,11 @@ function transformProductForPublic(product: any) {
       discount: firstStock.discountPercent || 0,
       inStock: inStock,
       imgUrl: firstImage,
-      attributes: variant.attributes || {}, // ✅ এখানে attributes রাখা হয়েছে
+      attributes: variant.attributes || {},
     };
   });
 
-  // 2. অ্যাট্রিবিউট সমষ্টি (attributeOrderByPriority তৈরির জন্য)
+  // Aggregated attributes
   const aggregatedAttributes: Record<string, Set<string>> = {};
   if (product.variants) {
     product.variants.forEach((variant: any) => {
@@ -72,17 +69,20 @@ function transformProductForPublic(product: any) {
     });
   }
 
-  // 3. ক্যাটাগরি priority অনুযায়ী attributeOrderByPriority তৈরি
+  // Priority: product-level first, then category
+  const productPriority = (product.attributePriority as string[]) || [];
   const categoryPriority =
     (product.category?.attributePriority as string[]) || [];
-  const attributeOrderByPriority = categoryPriority.map((key: string) => ({
+  const priority =
+    productPriority.length > 0 ? productPriority : categoryPriority;
+
+  const attributeOrderByPriority = priority.map((key: string) => ({
     key: key,
     values: aggregatedAttributes[key]
       ? Array.from(aggregatedAttributes[key])
       : [],
   }));
 
-  // 4. category – শুধু id, name, slug
   const category = product.category
     ? {
         id: product.category.id,
@@ -91,7 +91,6 @@ function transformProductForPublic(product: any) {
       }
     : null;
 
-  // 5. ফাইনাল রিটার্ন
   return {
     id: product.id,
     name: product.name,
@@ -99,7 +98,7 @@ function transformProductForPublic(product: any) {
     categoryId: product.categoryId,
     description: product.description,
     videoUrl: product.videoUrl,
-    thumbnailImage: thumbnailImage,
+    // thumbnailImage: thumbnailImage,
     variants: variants,
     attributeOrderByPriority: attributeOrderByPriority,
     isForceOrder: product.isForceOrder,
@@ -110,9 +109,9 @@ function transformProductForPublic(product: any) {
     category: category,
   };
 }
-export const productController = {
-  // ----- PUBLIC ENDPOINTS (transformed) -----
 
+export const productController = {
+  // ==================== PUBLIC ENDPOINTS ====================
   async getAllPublic(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -143,7 +142,7 @@ export const productController = {
               id: true,
               name: true,
               slug: true,
-              attributePriority: true, // ✅ যোগ করো
+              attributePriority: true,
             },
           },
           variants: {
@@ -169,7 +168,6 @@ export const productController = {
         transformProductForPublic(product),
       );
 
-      // ✅ infinite scroll এর জন্য next/prev
       const totalPages = Math.ceil(total / limit);
       const hasNext = page < totalPages;
       const hasPrev = page > 1;
@@ -206,7 +204,7 @@ export const productController = {
               id: true,
               name: true,
               slug: true,
-              attributePriority: true, // ✅ যোগ করো
+              attributePriority: true,
             },
           },
           variants: {
@@ -249,7 +247,7 @@ export const productController = {
               id: true,
               name: true,
               slug: true,
-              attributePriority: true, // ✅ যোগ করো
+              attributePriority: true,
             },
           },
           variants: {
@@ -278,7 +276,7 @@ export const productController = {
     }
   },
 
-  // ----- ADMIN ENDPOINTS (unchanged) -----
+  // ==================== ADMIN ENDPOINTS ====================
   async getAllAdmin(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -378,8 +376,14 @@ export const productController = {
     let savedFilenames: string[] = [];
 
     try {
-      const { name, categoryId, videoUrl, description, forceOrderPriority } =
-        req.body;
+      const {
+        name,
+        categoryId,
+        videoUrl,
+        description,
+        forceOrderPriority,
+        attributePriority,
+      } = req.body;
       const file = req.file as Express.Multer.File;
 
       // --- Validation ---
@@ -424,7 +428,7 @@ export const productController = {
         });
       }
 
-      // --- Thumbnail (single image) ---
+      // --- Thumbnail ---
       let thumbnail: string | null = null;
       if (file) {
         savedFilenames = saveImagesToDisk([file]);
@@ -433,6 +437,24 @@ export const productController = {
         return res
           .status(400)
           .json({ success: false, message: "Thumbnail image is required" });
+      }
+
+      // ✅ Parse attributePriority if it's a string
+      let parsedPriority: string[] = [];
+      if (attributePriority) {
+        if (typeof attributePriority === "string") {
+          try {
+            parsedPriority = JSON.parse(attributePriority);
+          } catch (e) {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Invalid attributePriority format. Must be a JSON array.",
+            });
+          }
+        } else if (Array.isArray(attributePriority)) {
+          parsedPriority = attributePriority;
+        }
       }
 
       const result = await prisma.$transaction(async (tx) => {
@@ -447,11 +469,35 @@ export const productController = {
               (forceOrderPriority && parseInt(forceOrderPriority) > 0) || false,
             forceOrderPriority: parseInt(forceOrderPriority) || 0,
             category: { connect: { id: categoryIdNum } },
+            attributePriority: parsedPriority,
           },
           include: {
-            category: { select: { id: true, name: true, slug: true } },
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                attributePriority: true,
+              },
+            },
           },
         });
+
+        // ✅ If category has no priority, set it from product priority
+        if (parsedPriority.length > 0) {
+          const cat = product.category;
+          if (
+            !cat.attributePriority ||
+            (Array.isArray(cat.attributePriority) &&
+              cat.attributePriority.length === 0)
+          ) {
+            await tx.category.update({
+              where: { id: cat.id },
+              data: { attributePriority: parsedPriority },
+            });
+          }
+        }
+
         return { product };
       });
 
@@ -489,6 +535,7 @@ export const productController = {
 
       const existingProduct = await prisma.product.findUnique({
         where: { id },
+        include: { category: true },
       });
       if (!existingProduct) {
         return res
@@ -499,7 +546,6 @@ export const productController = {
       const file = req.file as Express.Multer.File;
       const updateData: any = {};
 
-      // Allowed fields
       const allowedFields = [
         "name",
         "slug",
@@ -508,6 +554,7 @@ export const productController = {
         "isForceOrder",
         "forceOrderPriority",
         "categoryId",
+        "attributePriority",
       ];
       for (const field of allowedFields) {
         if (req.body[field] !== undefined) updateData[field] = req.body[field];
@@ -552,6 +599,25 @@ export const productController = {
         await validateAllVariantsHaveStock(id);
       }
 
+      // ✅ Parse attributePriority if it's a string
+      let parsedPriority: string[] | undefined = undefined;
+      if (updateData.attributePriority !== undefined) {
+        if (typeof updateData.attributePriority === "string") {
+          try {
+            parsedPriority = JSON.parse(updateData.attributePriority);
+            updateData.attributePriority = parsedPriority;
+          } catch (e) {
+            return res.status(400).json({
+              success: false,
+              message:
+                "Invalid attributePriority format. Must be a JSON array.",
+            });
+          }
+        } else if (Array.isArray(updateData.attributePriority)) {
+          parsedPriority = updateData.attributePriority;
+        }
+      }
+
       const {
         buyingOrMakingPrice: newBatchCost,
         sellingPrice: newBatchSellingPrice,
@@ -565,10 +631,33 @@ export const productController = {
           where: { id },
           data: updateData,
           include: {
-            category: { select: { id: true, name: true, slug: true } },
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                attributePriority: true,
+              },
+            },
           },
         });
 
+        // ✅ If product priority is updated and category has no priority, set it
+        if (parsedPriority && parsedPriority.length > 0) {
+          const cat = product.category;
+          if (
+            !cat.attributePriority ||
+            (Array.isArray(cat.attributePriority) &&
+              cat.attributePriority.length === 0)
+          ) {
+            await tx.category.update({
+              where: { id: cat.id },
+              data: { attributePriority: parsedPriority },
+            });
+          }
+        }
+
+        // --- Stock creation (existing logic) ---
         if (
           newBatchCost !== undefined &&
           newBatchSellingPrice !== undefined &&
@@ -751,7 +840,7 @@ export const productController = {
     }
   },
 
-  // ==================== ADVANCED FILTER (admin) ====================
+  // ==================== ADVANCED FILTER ====================
   async advancedFilter(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;

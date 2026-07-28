@@ -46,6 +46,7 @@ model Barcode {
   @@map("barcodes")
 }
 
+// schema.prisma - Product মডেলে attributePriority যোগ করুন
 model Product {
   id                 Int      @id @default(autoincrement())
   name               String
@@ -54,18 +55,17 @@ model Product {
   category           Category @relation(fields: [categoryId], references: [id])
   description        String?
   videoUrl           String?
-  thumbnail          String? // 👈 single image URL (not an array)
+  thumbnail          String?
   isForceOrder       Boolean  @default(false)
   forceOrderPriority Int      @default(0)
   isPublished        Boolean  @default(false)
+  attributePriority  Json?    @default("[]") // ✅ যোগ করো
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   variants     Variant[]
   suppliers    ProductSupplier[]
   manufactures Manufacture[]
-
-  @@map("products")
 }
 
 model Variant {

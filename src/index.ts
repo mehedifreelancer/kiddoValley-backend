@@ -7,7 +7,7 @@ import { swaggerSpec } from "./config/swagger";
 import emailRoutes from "./routes/public/email";
 import customerRoutes from "./routes/admin/customers";
 import supplierRoutes from "./routes/admin/suppliers";
-import sliderRoutes from "./routes/admin/slider";
+import sliderRoutes from "./routes/admin/heroBannerSlider";
 
 // Import routes
 import adminCategoryRoutes from "./routes/admin/categories";
@@ -23,6 +23,8 @@ import adminVariantRoutes from "./routes/admin/variant";
 import adminOrderRoutes from "./routes/admin/orders";
 import pathaoRoutes from "./routes/admin/pathao";
 import webSettingsRoutes from "./routes/admin/webSettings";
+import adminHeroSliderRoutes from "./routes/admin/heroSliders";
+import publicHeroSliderRoutes from "./routes/public/heroSliders";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -36,9 +38,10 @@ const PORT = process.env.PORT || 4000;
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
   "http://127.0.0.1:5174",
   "http://localhost:4000",
+  "http://192.168.137.1:3000/",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -107,7 +110,9 @@ app.use("/api/admin/pathao", pathaoRoutes);
 app.use("/api/admin/customers", adminAuth, customerRoutes);
 app.use("/api/admin/suppliers", adminAuth, supplierRoutes);
 app.use("/api/admin/web-settings", adminAuth, webSettingsRoutes);
-app.use("/api/admin/sliders", adminAuth, sliderRoutes);
+app.use("/api/admin/banner-sliders", adminAuth, sliderRoutes);
+app.use("/api/admin/hero-sliders", adminAuth, adminHeroSliderRoutes);
+app.use("/api/public/hero-sliders", publicHeroSliderRoutes);
 
 // Health check
 app.get("/", (req: Request, res: Response) => {

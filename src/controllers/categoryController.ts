@@ -26,7 +26,13 @@ export const categoryController = {
           where,
           skip,
           take: limit,
-          include: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            attributePriority: true, // ✅ যোগ করো
+            createdAt: true,
+            updatedAt: true,
             _count: {
               select: { products: true },
             },
@@ -41,6 +47,7 @@ export const categoryController = {
         name: cat.name,
         slug: cat.slug,
         productCount: cat._count.products,
+        attributePriority: cat.attributePriority || [], // ✅ ডিফল্ট খালি অ্যারে
         createdAt: cat.createdAt,
         updatedAt: cat.updatedAt,
       }));
@@ -68,7 +75,13 @@ export const categoryController = {
   async getAll(req: Request, res: Response) {
     try {
       const categories = await prisma.category.findMany({
-        include: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          attributePriority: true, // ✅ যোগ করো
+          createdAt: true,
+          updatedAt: true,
           _count: {
             select: { products: true },
           },
@@ -83,6 +96,7 @@ export const categoryController = {
         name: cat.name,
         slug: cat.slug,
         productCount: cat._count.products,
+        attributePriority: cat.attributePriority || [], // ✅ ডিফল্ট
         createdAt: cat.createdAt,
         updatedAt: cat.updatedAt,
       }));
@@ -114,14 +128,18 @@ export const categoryController = {
 
       const category = await prisma.category.findUnique({
         where: { id },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          attributePriority: true, // ✅ যোগ করো
+          createdAt: true,
+          updatedAt: true,
           products: {
             select: {
               id: true,
               name: true,
-              // barcode removed (moved to variant)
               isForceOrder: true,
-              // sellingPrice removed (now in Stock table)
             },
           },
         },
@@ -134,9 +152,15 @@ export const categoryController = {
         });
       }
 
+      // ✅ attributePriority ডিফল্ট সেট করো
+      const responseData = {
+        ...category,
+        attributePriority: category.attributePriority || [],
+      };
+
       res.json({
         success: true,
-        data: category,
+        data: responseData,
       });
     } catch (error: any) {
       console.error("Get category by ID error:", error);
@@ -154,15 +178,19 @@ export const categoryController = {
 
       const category = await prisma.category.findUnique({
         where: { slug },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          attributePriority: true, // ✅ যোগ করো
+          createdAt: true,
+          updatedAt: true,
           products: {
             select: {
               id: true,
               name: true,
               slug: true,
               isForceOrder: true,
-              // barcode removed (moved to variant)
-              // sellingPrice removed
             },
           },
         },
@@ -175,9 +203,14 @@ export const categoryController = {
         });
       }
 
+      const responseData = {
+        ...category,
+        attributePriority: category.attributePriority || [],
+      };
+
       res.json({
         success: true,
-        data: category,
+        data: responseData,
       });
     } catch (error: any) {
       console.error("Get category by slug error:", error);
@@ -188,10 +221,10 @@ export const categoryController = {
     }
   },
 
-  // Create category
+  // ✅ CREATE – attributePriority সাপোর্ট
   async create(req: Request, res: Response) {
     try {
-      const { name } = req.body;
+      const { name, attributePriority } = req.body;
 
       if (!name || typeof name !== "string" || name.trim() === "") {
         return res.status(400).json({
@@ -233,6 +266,15 @@ export const categoryController = {
         data: {
           name: name.trim(),
           slug,
+          attributePriority: attributePriority || [], // ✅ সেভ করো
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          attributePriority: true,
+          createdAt: true,
+          updatedAt: true,
         },
       });
 
@@ -250,37 +292,16 @@ export const categoryController = {
     }
   },
 
-  // Update category
+  // ✅ UPDATE – attributePriority আপডেট
   async update(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
-      const { name } = req.body;
+      const { name, attributePriority } = req.body;
 
       if (isNaN(id)) {
         return res.status(400).json({
           success: false,
           message: "Invalid category ID",
-        });
-      }
-
-      if (!name || typeof name !== "string" || name.trim() === "") {
-        return res.status(400).json({
-          success: false,
-          message: "Category name is required",
-        });
-      }
-
-      if (name.length < 2) {
-        return res.status(400).json({
-          success: false,
-          message: "Category name must be at least 2 characters",
-        });
-      }
-
-      if (name.length > 50) {
-        return res.status(400).json({
-          success: false,
-          message: "Category name must be less than 50 characters",
         });
       }
 
@@ -295,27 +316,59 @@ export const categoryController = {
         });
       }
 
-      const slug = generateSlug(name);
+      const updateData: any = {};
 
-      const duplicateCategory = await prisma.category.findFirst({
-        where: {
-          name: name.trim(),
-          id: { not: id },
-        },
-      });
-
-      if (duplicateCategory) {
-        return res.status(400).json({
-          success: false,
-          message: "Category with this name already exists",
+      if (name) {
+        if (typeof name !== "string" || name.trim() === "") {
+          return res.status(400).json({
+            success: false,
+            message: "Category name is required",
+          });
+        }
+        if (name.length < 2) {
+          return res.status(400).json({
+            success: false,
+            message: "Category name must be at least 2 characters",
+          });
+        }
+        if (name.length > 50) {
+          return res.status(400).json({
+            success: false,
+            message: "Category name must be less than 50 characters",
+          });
+        }
+        const slug = generateSlug(name);
+        const duplicateCategory = await prisma.category.findFirst({
+          where: {
+            name: name.trim(),
+            id: { not: id },
+          },
         });
+        if (duplicateCategory) {
+          return res.status(400).json({
+            success: false,
+            message: "Category with this name already exists",
+          });
+        }
+        updateData.name = name.trim();
+        updateData.slug = slug;
+      }
+
+      // ✅ attributePriority আপডেট (যদি পাঠানো হয়)
+      if (attributePriority !== undefined) {
+        updateData.attributePriority = attributePriority;
       }
 
       const category = await prisma.category.update({
         where: { id },
-        data: {
-          name: name.trim(),
-          slug,
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          attributePriority: true,
+          createdAt: true,
+          updatedAt: true,
         },
       });
 
@@ -333,7 +386,7 @@ export const categoryController = {
     }
   },
 
-  // Delete category
+  // Delete category (unchanged)
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);

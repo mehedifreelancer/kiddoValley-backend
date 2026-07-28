@@ -51,7 +51,7 @@ const getOrCreateCustomer = async (
 const sendOrderEmail = async (order: any) => {
   const baseUrl = process.env.API_BASE_URL || "http://localhost:4000";
   const emailPayload = {
-    to: process.env.ADMIN_EMAIL || "admin@example.com",
+    to: process.env.ADMIN_EMAIL || "kiddovalley451@gmail.com",
     subject: `Order #${order.invoiceNo} – Confirmed`,
     html: `
       <h2>Order Confirmation</h2>

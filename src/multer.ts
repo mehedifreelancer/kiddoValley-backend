@@ -34,7 +34,7 @@ export const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
 });
 
-// Middleware for product images (max 10 images)
+// Middleware for product images (max 10 images) – kept for backward compatibility
 export const uploadProductImages = upload.array("images", 10);
 
 // Helper to save a single product image to disk
@@ -58,7 +58,18 @@ export const saveImagesToDisk = (files: Express.Multer.File[]): string[] => {
 };
 
 // ============================================
-// 2. LOGO – disk storage (direct save)
+// 2. PRODUCT THUMBNAIL – memory storage (same as product images)
+// ============================================
+const productThumbnailStorage = multer.memoryStorage();
+
+export const uploadProductThumbnail = multer({
+  storage: productThumbnailStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter,
+}).single("thumbnail");
+
+// ============================================
+// 3. LOGO – disk storage (direct save)
 // ============================================
 const logoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -76,14 +87,15 @@ const logoStorage = multer.diskStorage({
 export const uploadLogo = multer({
   storage: logoStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter, // reuse same filter
+  fileFilter,
 });
 
-
-// Slider images – disk storage
+// ============================================
+// 4. SLIDER BANNER (old slider) – disk storage
+// ============================================
 const sliderStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(process.cwd(), "public/uploads/slider-images");
+    const dir = path.join(process.cwd(), "public/uploads/banner-slider-images");
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -96,6 +108,28 @@ const sliderStorage = multer.diskStorage({
 
 export const uploadSliderImage = multer({
   storage: sliderStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter,
+});
+
+// ============================================
+// 5. HERO SLIDER (new) – disk storage
+// ============================================
+const heroSliderStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(process.cwd(), "public/uploads/hero-slider");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `hero-${unique}${ext}`);
+  },
+});
+
+export const uploadHeroSliderImage = multer({
+  storage: heroSliderStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter,
 });

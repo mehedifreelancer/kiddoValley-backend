@@ -41,22 +41,24 @@ async function main() {
   });
   console.log("✅ Category seeded");
 
-  // Product (use upsert to avoid duplicate slug)
+  // Product – now uses `thumbnail` (single image URL)
   const product = await prisma.product.upsert({
     where: { slug: "mina-book" },
-    update: {},
+    update: {
+      thumbnail: "https://picsum.photos/id/20/400/300", // in case it exists without thumbnail
+    },
     create: {
       name: "মীনা বই",
       slug: "mina-book",
       categoryId: category.id,
       description: "<p>মীনা ও তার বন্ধুদের গল্প</p>",
-      images: [{ imgUrl: "https://picsum.photos/id/20/400/300" }],
+      thumbnail: "https://picsum.photos/id/20/400/300", // single image
       isPublished: true,
     },
   });
   console.log("✅ Product seeded");
 
-  // Variant (use upsert to avoid duplicate SKU)
+  // Variant (unchanged)
   const variant = await prisma.variant.upsert({
     where: { sku: "kdv-mina-book" },
     update: {},
@@ -70,7 +72,7 @@ async function main() {
   });
   console.log("✅ Variant seeded");
 
-  // Stock – check existence to avoid duplicate creation and movement
+  // Stock – unchanged
   const existingStock = await prisma.stock.findFirst({
     where: { variantId: variant.id, batchNo: "1" },
   });
@@ -101,7 +103,7 @@ async function main() {
     console.log("⚠️ Stock already exists, skipping");
   }
 
-  // Attributes
+  // Attributes (unchanged)
   await prisma.productAttribute.upsert({
     where: { name: "Color" },
     update: {},
@@ -119,7 +121,7 @@ async function main() {
   });
   console.log("✅ Attributes seeded");
 
-  // Settings
+  // Settings (unchanged)
   await prisma.setting.upsert({
     where: { key: "store_name" },
     update: {},

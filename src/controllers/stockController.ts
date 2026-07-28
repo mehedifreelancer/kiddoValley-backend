@@ -23,7 +23,6 @@ export const stockController = {
         quantity,
       } = req.body;
 
-      // --- Existing validations (unchanged) ---
       if (
         !variantId ||
         buyingOrMakingPrice === undefined ||
@@ -64,7 +63,6 @@ export const stockController = {
           .status(404)
           .json({ success: false, message: "Variant not found" });
 
-      // --- Buying price uniqueness check (unchanged) ---
       const existingStock = await prisma.stock.findFirst({
         where: {
           variantId: variant.id,
@@ -78,17 +76,14 @@ export const stockController = {
         });
       }
 
-      // --- Determine final batch number (NEW LOGIC) ---
       let finalBatchNo: string;
       const trimmedBatch = batchNo?.trim();
 
       if (!trimmedBatch) {
-        // Auto‑generate: find the highest numeric batch number for this variant
         const existingBatches = await prisma.stock.findMany({
           where: { variantId },
           select: { batchNo: true },
         });
-
         let maxNum = 0;
         for (const stock of existingBatches) {
           const num = parseInt(stock.batchNo, 10);
@@ -96,7 +91,6 @@ export const stockController = {
         }
         finalBatchNo = (maxNum + 1).toString();
       } else {
-        // Batch number provided – check uniqueness (existing behaviour)
         const existingBatch = await prisma.stock.findFirst({
           where: { variantId, batchNo: trimmedBatch },
         });
@@ -109,7 +103,6 @@ export const stockController = {
         finalBatchNo = trimmedBatch;
       }
 
-      // --- Create stock (unchanged except using finalBatchNo) ---
       const stockQuantity = quantity && quantity > 0 ? quantity : 0;
 
       const newStock = await prisma.stock.create({
@@ -123,7 +116,6 @@ export const stockController = {
         },
       });
 
-      // --- Stock movement (unchanged) ---
       if (stockQuantity > 0) {
         await prisma.stockMovement.create({
           data: {
@@ -143,6 +135,7 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+
   async reduceStock(req: Request, res: Response) {
     try {
       const { stockId, quantity, reason, saleId } = req.body;
@@ -341,6 +334,7 @@ export const stockController = {
     }
   },
 
+  // ✅ Fixed: replaced images with thumbnail
   async getProductStockList(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -378,7 +372,7 @@ export const stockController = {
         return {
           id: p.id,
           name: p.name,
-          images: p.images,
+          thumbnail: p.thumbnail, // ✅ fixed
           category_id: p.categoryId,
           category_name: p.category?.name,
           total_stock: total,
@@ -403,6 +397,7 @@ export const stockController = {
     }
   },
 
+  // ✅ Fixed: replaced images with thumbnail in query
   async advancedFilter(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -438,11 +433,12 @@ export const stockController = {
       let orderClause = "ORDER BY total_stock ASC";
       if (sortStock === "high") orderClause = "ORDER BY total_stock DESC";
 
+      // ✅ Fixed: p.images → p.thumbnail
       const query = `
         SELECT 
           p.id,
           p.name,
-          p.images,
+          p.thumbnail,
           p.category_id,
           c.name as category_name,
           COALESCE(SUM(s.current_qty), 0) as total_stock,
@@ -459,7 +455,7 @@ export const stockController = {
         LEFT JOIN stocks s ON s.variant_id = v.id
         LEFT JOIN categories c ON p.category_id = c.id
         ${whereClause}
-        GROUP BY p.id, p.name, p.images, p.category_id, c.name
+        GROUP BY p.id, p.name, p.thumbnail, p.category_id, c.name
         ${orderClause}
         LIMIT ? OFFSET ?
       `;
@@ -512,7 +508,6 @@ export const stockController = {
     }
   },
 
-  // ✅ getFlatStockList with barcode exact‑match fix (no 'mode' – works in SQLite/MySQL)
   async getFlatStockList(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -535,7 +530,6 @@ export const stockController = {
         where.OR = [
           { batchNo: { contains: trimmed } },
           { variant: { sku: { contains: trimmed } } },
-          // Barcode exact match (case‑sensitive, but barcodes are usually case‑insensitive; you can store them in uppercase)
           { variant: { barcode: { equals: trimmed } } },
           { variant: { product: { name: { contains: trimmed } } } },
         ];
@@ -602,14 +596,11 @@ export const stockController = {
     }
   },
 
-  // controllers/stockController.ts (add this method)
-
   async stockIn(req: Request, res: Response) {
     try {
       const { supplierId, supplierName, stockInDate, items, subtotal, total } =
         req.body;
 
-      // --- Basic validation ---
       if (!supplierId) {
         return res
           .status(400)
@@ -621,7 +612,6 @@ export const stockController = {
           .json({ success: false, message: "At least one item is required" });
       }
 
-      // Optional: more detailed validation (positive numbers, etc.)
       for (const item of items) {
         if (!item.stockId || !item.quantity || item.quantity <= 0) {
           return res.status(400).json({
@@ -634,7 +624,6 @@ export const stockController = {
 
       const adminId = (req as any).admin?.id;
 
-      // --- Transaction: update all stocks and create movements ---
       await prisma.$transaction(async (tx) => {
         for (const item of items) {
           const stock = await tx.stock.findUnique({
@@ -646,18 +635,16 @@ export const stockController = {
             throw new Error(`Stock batch with ID ${item.stockId} not found`);
           }
 
-          // Increase current quantity
           await tx.stock.update({
             where: { id: item.stockId },
             data: { currentQty: { increment: item.quantity } },
           });
 
-          // Record movement
           await tx.stockMovement.create({
             data: {
               stockId: item.stockId,
               productId: stock.variant.productId,
-              type: "PURCHASE", // or "STOCK_IN" if you prefer
+              type: "PURCHASE",
               quantity: item.quantity,
               reason: `Stock in from supplier ${supplierName || `ID:${supplierId}`} on ${new Date(stockInDate).toLocaleString()}`,
               referenceId: null,

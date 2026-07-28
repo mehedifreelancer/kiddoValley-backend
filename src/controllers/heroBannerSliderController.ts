@@ -50,7 +50,7 @@ export const sliderController = {
       }
 
       const baseUrl = `${req.protocol}://${req.get("host")}`;
-      const imageUrl = `${baseUrl}/uploads/slider-images/${file.filename}`;
+      const imageUrl = `${baseUrl}/uploads/banner-slider-images/${file.filename}`;
 
       // Get max order for this device
       const maxOrder = await prisma.sliderImage.aggregate({
@@ -72,12 +72,10 @@ export const sliderController = {
     } catch (error: any) {
       if (filePath) deleteFile(filePath);
       console.error("Add slider error:", error);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: error.message || "Failed to add slider",
-        });
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to add slider",
+      });
     }
   },
 
@@ -114,12 +112,10 @@ export const sliderController = {
       res.json({ success: true, data: updated });
     } catch (error: any) {
       console.error("Reorder sliders error:", error);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: error.message || "Failed to reorder sliders",
-        });
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to reorder sliders",
+      });
     }
   },
 
@@ -153,12 +149,10 @@ export const sliderController = {
       res.json({ success: true, message: "Slider deleted" });
     } catch (error: any) {
       console.error("Delete slider error:", error);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: error.message || "Failed to delete slider",
-        });
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to delete slider",
+      });
     }
   },
 };

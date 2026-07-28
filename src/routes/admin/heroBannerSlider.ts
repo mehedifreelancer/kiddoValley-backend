@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { adminAuth } from "../../middleware/adminAuth";
-import { sliderController } from "../../controllers/sliderController";
+import { sliderController } from "../../controllers/heroBannerSliderController";
 import { uploadSliderImage } from "../../multer";
 
 const router = Router();

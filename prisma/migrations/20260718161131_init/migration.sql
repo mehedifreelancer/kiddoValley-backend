@@ -49,7 +49,7 @@ CREATE TABLE `products` (
     `categoryId` INTEGER NOT NULL,
     `description` VARCHAR(191) NULL,
     `videoUrl` VARCHAR(191) NULL,
-    `images` JSON NOT NULL,
+    `thumbnail` VARCHAR(191) NULL,
     `isForceOrder` BOOLEAN NOT NULL DEFAULT false,
     `forceOrderPriority` INTEGER NOT NULL DEFAULT 0,
     `isPublished` BOOLEAN NOT NULL DEFAULT false,
@@ -210,6 +210,30 @@ CREATE TABLE `slider_images` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `deviceType` VARCHAR(191) NOT NULL,
     `imageUrl` VARCHAR(191) NOT NULL,
+    `order` INTEGER NOT NULL DEFAULT 0,
+    `isActive` BOOLEAN NOT NULL DEFAULT true,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `hero_sliders` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `badgeText` VARCHAR(191) NOT NULL,
+    `firstTitle` VARCHAR(191) NOT NULL,
+    `secondTitle` VARCHAR(191) NOT NULL,
+    `firstTitleColor` VARCHAR(191) NOT NULL,
+    `secondTitleColor` VARCHAR(191) NOT NULL,
+    `description` VARCHAR(191) NOT NULL,
+    `bookTitle` VARCHAR(191) NOT NULL,
+    `bookSubtitle` VARCHAR(191) NOT NULL,
+    `sliderDetailsUrl` VARCHAR(191) NULL,
+    `bgImage` VARCHAR(191) NOT NULL,
+    `innerBigImage` VARCHAR(191) NOT NULL,
+    `innerTopImage` VARCHAR(191) NOT NULL,
+    `innerBottomImage` VARCHAR(191) NOT NULL,
     `order` INTEGER NOT NULL DEFAULT 0,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

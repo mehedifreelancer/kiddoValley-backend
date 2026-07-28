@@ -23,12 +23,15 @@ model User {
 }
 
 model Category {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  slug      String    @unique
-  products  Product[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+
+  attributePriority Json? @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("categories")
 }
@@ -51,7 +54,7 @@ model Product {
   category           Category @relation(fields: [categoryId], references: [id])
   description        String?
   videoUrl           String?
-  images             Json
+  thumbnail          String? // 👈 single image URL (not an array)
   isForceOrder       Boolean  @default(false)
   forceOrderPriority Int      @default(0)
   isPublished        Boolean  @default(false)
@@ -219,6 +222,29 @@ model SliderImage {
   updatedAt  DateTime @updatedAt
 
   @@map("slider_images")
+}
+
+model HeroSlider {
+  id               Int      @id @default(autoincrement())
+  badgeText        String
+  firstTitle       String
+  secondTitle      String
+  firstTitleColor  String // Tailwind class for first title (e.g., "text-purple-600")
+  secondTitleColor String // Tailwind class for second title
+  description      String
+  bookTitle        String
+  bookSubtitle     String
+  sliderDetailsUrl String?
+  bgImage          String
+  innerBigImage    String
+  innerTopImage    String
+  innerBottomImage String
+  order            Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("hero_sliders")
 }
 
 model Manufacture {

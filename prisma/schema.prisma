@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -135,42 +135,56 @@ model CustomerInfo {
 }
 
 model Order {
-  id                  Int           @id @default(autoincrement())
-  invoiceNo           String        @unique
-  subtotal            Float
-  discount            Float
-  total               Float
-  customerName        String
-  customerPhone       String
-  customerPhone2      String?
-  customerAddress     String
-  deliveryDate        DateTime?
-  paymentStatus       String        @default("pending")
-  deliveryStatus      String?       @default("Pending") // 🆕 New field
-  pathaoInvoiceId     String? // 🆕 New field
-  pathaoConsignmentId String?       @unique
-  pathaoLastSyncedAt  DateTime? // 🆕 New field
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  soldItems           SoldItem[]
-  orderedByPhone      String? // foreign key to CustomerInfo.phone
-  customerInfo        CustomerInfo? @relation(fields: [orderedByPhone], references: [phone])
+  id              Int       @id @default(autoincrement())
+  invoiceNo       String    @unique
+  subtotal        Float
+  discount        Float
+  total           Float
+  customerName    String
+  customerPhone   String
+  customerPhone2  String?
+  customerAddress String
+  deliveryDate    DateTime?
+
+  // ✅ নতুন ফিল্ড
+  orderStatus    String  @default("new") // new, confirmed, cancelled
+  isWebsiteOrder Boolean @default(false)
+  isSuspicious   Boolean @default(false)
+
+  paymentStatus       String    @default("pending")
+  deliveryStatus      String?   @default("Pending")
+  pathaoInvoiceId     String?
+  pathaoConsignmentId String?   @unique
+  pathaoLastSyncedAt  DateTime?
+
+  soldItems      SoldItem[]
+  orderedByPhone String?
+  customerInfo   CustomerInfo? @relation(fields: [orderedByPhone], references: [phone])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model SoldItem {
-  id         Int      @id @default(autoincrement())
-  orderId    Int
-  order      Order    @relation(fields: [orderId], references: [id])
-  productId  Int
-  variantId  Int?
-  stockId    Int
-  stock      Stock    @relation(fields: [stockId], references: [id])
-  quantity   Int
-  unitPrice  Float
-  totalPrice Float
-  createdAt  DateTime @default(now())
+  id      Int   @id @default(autoincrement())
+  orderId Int
+  order   Order @relation(fields: [orderId], references: [id])
 
-  @@map("sold_items")
+  // ✅ নতুন Snapshot ফিল্ড
+  productName       String
+  variantSku        String
+  variantAttributes Json?
+  unitPrice         Float
+  totalPrice        Float
+  quantity          Int
+
+  // রেফারেন্স (ঐচ্ছিক)
+  productId Int?
+  variantId Int?
+  stockId   Int?
+
+  createdAt DateTime @default(now())
+  stock     Stock?   @relation(fields: [stockId], references: [id])
 }
 
 model Supplier {

@@ -14,6 +14,9 @@ interface OrderItemInput {
   totalPrice: number;
 }
 
+// ✅ পাথাও সক্রিয় কিনা চেক করুন
+const isPathaoActive = process.env.PATHAO_ACTIVE === "true";
+
 // ----- Helper: get or create customer -----
 const getOrCreateCustomer = async (
   phone: string,
@@ -47,30 +50,116 @@ const getOrCreateCustomer = async (
 };
 
 // ----- Helper: send email -----
+// ----- Helper: send email (updated) -----
 const sendOrderEmail = async (order: any) => {
   const baseUrl = process.env.API_BASE_URL || "http://localhost:4000";
+  const adminPanelUrl =
+    process.env.ADMIN_PANEL_URL || "http://localhost:3000/admin/order-list";
+
+  const isWebsite = order.isWebsiteOrder === true;
+  const orderType = isWebsite ? "🛒 Website" : "📦 Admin";
+  const subject = isWebsite
+    ? "💚✨ 🛒 Website Order Placed! 💚✨"
+    : "📦 New Admin Order Placed!";
+
+  const itemsHtml =
+    order.soldItems
+      ?.map(
+        (item: any) => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #eee;">${item.productName}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee;text-align:center;">${item.quantity}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;">${item.unitPrice.toFixed(2)} TK</td>
+      <td style="padding:8px;border-bottom:1px solid #eee;text-align:right;">${item.totalPrice.toFixed(2)} TK</td>
+    </tr>
+  `,
+      )
+      .join("") || "";
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; background: #f9f9f9; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 24px; }
+        .header { border-bottom: 3px solid #E57373; padding-bottom: 12px; margin-bottom: 20px; }
+        .header h1 { font-size: 24px; margin: 0; color: #333; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+        .badge-website { background: #e3f2fd; color: #0d47a1; }
+        .badge-admin { background: #fce4ec; color: #b71c1c; }
+        .info { background: #f5f5f5; padding: 12px; border-radius: 8px; margin: 16px 0; }
+        .info p { margin: 4px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        th { background: #f0f0f0; text-align: left; padding: 8px; }
+        .totals { text-align: right; margin-top: 12px; }
+        .totals p { margin: 4px 0; }
+        .grand-total { font-size: 20px; font-weight: bold; color: #E57373; }
+        .footer { border-top: 1px solid #ddd; margin-top: 24px; padding-top: 16px; text-align: center; color: #888; font-size: 13px; }
+        .btn { display: inline-block; background: #E57373; color: #fff; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>${orderType} Order Placed 🎉</h1>
+          <span class="badge ${isWebsite ? "badge-website" : "badge-admin"}">
+            ${isWebsite ? "🌐 Website" : "🏢 Admin"}
+          </span>
+          <span style="float:right;font-size:14px;color:#555;">Invoice: <strong>${order.invoiceNo}</strong></span>
+        </div>
+
+        <div class="info">
+          <p><strong>👤 Customer:</strong> ${order.customerName}</p>
+          <p><strong>📞 Phone:</strong> ${order.customerPhone} ${order.customerPhone2 ? `(Alt: ${order.customerPhone2})` : ""}</p>
+          <p><strong>📍 Address:</strong> ${order.customerAddress}</p>
+          <p><strong>📅 Order Date:</strong> ${new Date(order.createdAt).toLocaleString()}</p>
+          <p><strong>📦 Status:</strong> ${order.orderStatus}</p>
+          ${order.deliveryDate ? `<p><strong>📬 Delivery Date:</strong> ${new Date(order.deliveryDate).toLocaleDateString()}</p>` : ""}
+        </div>
+
+        <h3 style="margin-top:20px;">🛍️ Order Items</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th style="text-align:center;">Qty</th>
+              <th style="text-align:right;">Unit Price</th>
+              <th style="text-align:right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <p><strong>Subtotal:</strong> ${order.subtotal.toFixed(2)} TK</p>
+          ${order.discount > 0 ? `<p><strong>Discount:</strong> -${order.discount.toFixed(2)} TK</p>` : ""}
+          <p class="grand-total">Total: ${order.total.toFixed(2)} TK</p>
+        </div>
+
+        <div style="margin-top:24px;text-align:center;">
+          <a href="${adminPanelUrl}" class="btn">📋 View in Admin Panel</a>
+        </div>
+
+        <div class="footer">
+          <p>Thank you for choosing Kiddo Valley! ❤️</p>
+          <p style="font-size:11px;">This is an automated notification. Please do not reply.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
   const emailPayload = {
     to: process.env.ADMIN_EMAIL || "kiddovalley451@gmail.com",
-    subject: `Order #${order.invoiceNo} – Confirmed`,
-    html: `
-      <h2>Order Confirmation</h2>
-      <p><strong>Invoice:</strong> ${order.invoiceNo}</p>
-      <p><strong>Customer:</strong> ${order.customerName}</p>
-      <p><strong>Phone:</strong> ${order.customerPhone}</p>
-      <p><strong>Address:</strong> ${order.customerAddress}</p>
-      <p><strong>Total:</strong> ${order.total.toFixed(2)} TK</p>
-      <p><strong>Delivery Date:</strong> ${
-        order.deliveryDate
-          ? new Date(order.deliveryDate).toLocaleDateString()
-          : "N/A"
-      }</p>
-      <hr/>
-      <h4>Items</h4>
-      <ul>
-        ${order.soldItems?.map((item: any) => `<li>${item.productName} – Qty: ${item.quantity} – Price: ${item.totalPrice.toFixed(2)} TK</li>`).join("") || "No items"}
-      </ul>
-    `,
+    subject: subject,
+    html: html,
+    text: `New order ${order.invoiceNo} placed by ${order.customerName}. Total: ${order.total} TK.`,
   };
+
   await axios.post(`${baseUrl}/api/public/email/send`, emailPayload);
 };
 
@@ -212,7 +301,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 2. CONFIRM ORDER (existing order -> 'confirmed' + Pathao) --------------------
+  // -------------------- 2. CONFIRM ORDER (existing order -> 'confirmed' + Pathao conditional) --------------------
   async confirmOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -244,42 +333,62 @@ export const orderController = {
         });
       }
 
-      const totalQuantity = order.soldItems.reduce(
-        (sum, item) => sum + item.quantity,
-        0,
-      );
-      const pathaoPayload = {
-        merchant_order_id: String(orderId),
-        recipient_name: order.customerName,
-        recipient_phone: order.customerPhone,
-        recipient_address: order.customerAddress,
-        delivery_type: 48,
-        item_type: 2,
-        item_weight: 0.5,
-        amount_to_collect: order.total,
-        item_quantity: totalQuantity || 1,
-      };
-
       let pathaoResult = null;
-      try {
-        pathaoResult = await pathaoService.createOrder(pathaoPayload);
-        console.log("✅ Pathao order created:", pathaoResult.consignment_id);
-      } catch (err: any) {
-        console.error("❌ Pathao creation failed:", err.message);
-        return res.status(500).json({
-          success: false,
-          message: "Pathao booking failed: " + err.message,
-        });
+      let pathaoError = null;
+
+      // ✅ শুধুমাত্র PATHAO_ACTIVE=true থাকলেই পাথাও কল হবে
+      if (isPathaoActive) {
+        const totalQuantity = order.soldItems.reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        );
+        const pathaoPayload = {
+          merchant_order_id: String(orderId),
+          recipient_name: order.customerName,
+          recipient_phone: order.customerPhone,
+          recipient_address: order.customerAddress,
+          delivery_type: 48,
+          item_type: 2,
+          item_weight: 0.5,
+          amount_to_collect: order.total,
+          item_quantity: totalQuantity || 1,
+        };
+
+        try {
+          pathaoResult = await pathaoService.createOrder(pathaoPayload);
+          console.log("✅ Pathao order created:", pathaoResult.consignment_id);
+        } catch (err: any) {
+          pathaoError = err.message;
+          console.error("❌ Pathao creation failed:", pathaoError);
+          // যদি পাথাও ডিজেবল না থাকে কিন্তু কল ফেল করে, তবে আমরা অর্ডার কনফর্ম করব না
+          // কারণ এটা ইচ্ছাকৃত সিদ্ধান্ত – আপনি চাইলে এখানে throw করতে পারেন
+          return res.status(500).json({
+            success: false,
+            message: "Pathao booking failed: " + pathaoError,
+          });
+        }
+      } else {
+        console.log(
+          "ℹ️ Pathao is disabled (PATHAO_ACTIVE != true) – skipping Pathao booking.",
+        );
+      }
+
+      // অর্ডার আপডেট
+      const updateData: any = {
+        orderStatus: "confirmed",
+      };
+      if (pathaoResult) {
+        updateData.deliveryStatus = "Pending";
+        updateData.pathaoConsignmentId = pathaoResult.consignment_id;
+        updateData.pathaoLastSyncedAt = new Date();
+      } else {
+        // পাথাও ডিজেবল থাকলে বা ফেল করলে, ডেলিভারি স্ট্যাটাস সেট করবেন না
+        updateData.deliveryStatus = null;
       }
 
       const updatedOrder = await prisma.order.update({
         where: { id: orderId },
-        data: {
-          orderStatus: "confirmed",
-          deliveryStatus: "Pending",
-          pathaoConsignmentId: pathaoResult.consignment_id,
-          pathaoLastSyncedAt: new Date(),
-        },
+        data: updateData,
         include: { soldItems: true },
       });
 
@@ -292,7 +401,9 @@ export const orderController = {
       res.json({
         success: true,
         data: updatedOrder,
-        message: "Order confirmed and Pathao booked",
+        message: pathaoResult
+          ? "Order confirmed and Pathao booked"
+          : "Order confirmed (Pathao disabled or skipped)",
       });
     } catch (error: any) {
       console.error("Confirm order error:", error);
@@ -424,30 +535,37 @@ export const orderController = {
         return newOrder;
       });
 
-      // 2) Pathao order creation
-      const totalQuantity = items.reduce(
-        (sum: number, item: OrderItemInput) => sum + item.quantity,
-        0,
-      );
-
-      const pathaoPayload = {
-        merchant_order_id: String(order.id),
-        recipient_name: order.customerName,
-        recipient_phone: order.customerPhone,
-        recipient_address: order.customerAddress,
-        delivery_type: 48,
-        item_type: 2,
-        item_weight: 0.5,
-        amount_to_collect: order.total,
-        item_quantity: totalQuantity || 1,
-      };
-
+      // 2) Pathao order creation (conditional)
       let pathaoResult = null;
-      try {
-        pathaoResult = await pathaoService.createOrder(pathaoPayload);
-        console.log("✅ Pathao order created:", pathaoResult.consignment_id);
-      } catch (err: any) {
-        console.error("❌ Pathao creation failed:", err.message);
+      if (isPathaoActive) {
+        const totalQuantity = items.reduce(
+          (sum: number, item: OrderItemInput) => sum + item.quantity,
+          0,
+        );
+        const pathaoPayload = {
+          merchant_order_id: String(order.id),
+          recipient_name: order.customerName,
+          recipient_phone: order.customerPhone,
+          recipient_address: order.customerAddress,
+          delivery_type: 48,
+          item_type: 2,
+          item_weight: 0.5,
+          amount_to_collect: order.total,
+          item_quantity: totalQuantity || 1,
+        };
+
+        try {
+          pathaoResult = await pathaoService.createOrder(pathaoPayload);
+          console.log("✅ Pathao order created:", pathaoResult.consignment_id);
+        } catch (err: any) {
+          console.error("❌ Pathao creation failed:", err.message);
+          // পাথাও ফেল করলে আমরা অর্ডার তো বানিয়েছি, তাই শুধু লগ রেখে চালিয়ে যাই
+          // কিন্তু আপনি চাইলে এখানে throw করতে পারেন
+        }
+      } else {
+        console.log(
+          "ℹ️ Pathao is disabled (PATHAO_ACTIVE != true) – skipping Pathao booking.",
+        );
       }
 
       let updatedOrder = order;
@@ -462,6 +580,7 @@ export const orderController = {
           include: { soldItems: true },
         });
       } else {
+        // পাথাও ডিজেবল বা ফেল থাকলে ডেলিভারি স্ট্যাটাস null রাখুন
         updatedOrder =
           (await prisma.order.findUnique({
             where: { id: order.id },
@@ -480,7 +599,7 @@ export const orderController = {
         data: updatedOrder,
         message: pathaoResult
           ? "Order created and confirmed (Pathao booked)"
-          : "Order created and confirmed (Pathao failed)",
+          : "Order created and confirmed (Pathao disabled or failed)",
       });
     } catch (error: any) {
       console.error("Create & confirm error:", error);
@@ -488,7 +607,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 4. CANCEL ORDER --------------------
+  // -------------------- 4. CANCEL ORDER (with conditional Pathao cancel) --------------------
   async cancelOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -513,12 +632,16 @@ export const orderController = {
           .json({ success: false, message: "Order already cancelled" });
       }
 
-      if (order.pathaoConsignmentId) {
+      // ✅ Pathao cancel only if active and consignment exists
+      if (isPathaoActive && order.pathaoConsignmentId) {
         try {
           await pathaoService.cancelOrder(order.pathaoConsignmentId);
+          console.log(`✅ Pathao order ${order.pathaoConsignmentId} cancelled`);
         } catch (err) {
           console.error("Pathao cancel failed:", err);
         }
+      } else if (order.pathaoConsignmentId) {
+        console.log("ℹ️ Pathao is disabled – skipping Pathao cancellation.");
       }
 
       const cancelledOrder = await prisma.$transaction(async (tx) => {
@@ -837,8 +960,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 10. UPDATE ORDER (only customer info for 'new' orders) --------------------
-  // -------------------- UPDATE ORDER (with items & stock adjustment) --------------------
+  // -------------------- 10. UPDATE ORDER (with items & stock adjustment) --------------------
   async updateOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -883,12 +1005,10 @@ export const orderController = {
 
       // Validate items
       if (!items || items.length === 0) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Order must contain at least one item",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Order must contain at least one item",
+        });
       }
 
       const result = await prisma.$transaction(async (tx) => {

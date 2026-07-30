@@ -42,6 +42,7 @@ function transformProductForPublic(product: any) {
     return {
       id: variant.id,
       sku: variant.sku,
+      stockId: firstStock.id || null, // ✅ stockId যোগ করা হলো
       price: firstStock.sellingPrice || 0,
       discount: firstStock.discountPercent || 0,
       inStock: inStock,
@@ -98,7 +99,7 @@ function transformProductForPublic(product: any) {
     categoryId: product.categoryId,
     description: product.description,
     videoUrl: product.videoUrl,
-    // thumbnailImage: thumbnailImage,
+    thumbnailImage: thumbnailImage, // ✅ আনকমেন্ট করা হলো
     variants: variants,
     attributeOrderByPriority: attributeOrderByPriority,
     isForceOrder: product.isForceOrder,
@@ -149,6 +150,7 @@ export const productController = {
             include: {
               stocks: {
                 select: {
+                  id: true,
                   currentQty: true,
                   sellingPrice: true,
                   discountPercent: true,
@@ -211,6 +213,7 @@ export const productController = {
             include: {
               stocks: {
                 select: {
+                  id: true,
                   currentQty: true,
                   sellingPrice: true,
                   discountPercent: true,
@@ -254,6 +257,7 @@ export const productController = {
             include: {
               stocks: {
                 select: {
+                  id: true,
                   currentQty: true,
                   sellingPrice: true,
                   discountPercent: true,
@@ -439,7 +443,6 @@ export const productController = {
           .json({ success: false, message: "Thumbnail image is required" });
       }
 
-      // ✅ Parse attributePriority if it's a string
       let parsedPriority: string[] = [];
       if (attributePriority) {
         if (typeof attributePriority === "string") {
@@ -483,7 +486,6 @@ export const productController = {
           },
         });
 
-        // ✅ If category has no priority, set it from product priority
         if (parsedPriority.length > 0) {
           const cat = product.category;
           if (
@@ -587,7 +589,6 @@ export const productController = {
         updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
       }
 
-      // --- Thumbnail ---
       let thumbnail: string | null = req.body.existingThumbnail || null;
       if (file) {
         savedFilenames = saveImagesToDisk([file]);
@@ -599,7 +600,6 @@ export const productController = {
         await validateAllVariantsHaveStock(id);
       }
 
-      // ✅ Parse attributePriority if it's a string
       let parsedPriority: string[] | undefined = undefined;
       if (updateData.attributePriority !== undefined) {
         if (typeof updateData.attributePriority === "string") {
@@ -642,7 +642,6 @@ export const productController = {
           },
         });
 
-        // ✅ If product priority is updated and category has no priority, set it
         if (parsedPriority && parsedPriority.length > 0) {
           const cat = product.category;
           if (
@@ -657,7 +656,6 @@ export const productController = {
           }
         }
 
-        // --- Stock creation (existing logic) ---
         if (
           newBatchCost !== undefined &&
           newBatchSellingPrice !== undefined &&

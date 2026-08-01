@@ -216,10 +216,10 @@ model ProductSupplier {
 }
 
 model Setting {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(cuid())
   key       String   @unique
-  value     String
-  type      String   @default("string")
+  value     String   @db.Text
+  type      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

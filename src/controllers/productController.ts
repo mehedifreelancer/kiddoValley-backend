@@ -1004,4 +1004,72 @@ export const productController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+  // ==================== RELATED PRODUCTS ====================
+  async getRelatedProducts(req: Request, res: Response) {
+    try {
+      const productId = parseInt(req.params.id);
+      if (isNaN(productId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid product ID" });
+      }
+
+      // Get the product to find its category
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+        select: { categoryId: true },
+      });
+      if (!product) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+      }
+
+      // Fetch related products from same category, excluding current, limit to 10
+      const relatedProducts = await prisma.product.findMany({
+        where: {
+          categoryId: product.categoryId,
+          id: { not: productId },
+          isPublished: true,
+        },
+        take: 10,
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              attributePriority: true,
+            },
+          },
+          variants: {
+            include: {
+              stocks: {
+                select: {
+                  id: true,
+                  currentQty: true,
+                  sellingPrice: true,
+                  discountPercent: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const transformed = relatedProducts.map((p) =>
+        transformProductForPublic(p),
+      );
+      res.json({ success: true, data: transformed });
+    } catch (error: any) {
+      console.error("Get related products error:", error);
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: error.message || "Failed to fetch related products",
+        });
+    }
+  },
 };

@@ -668,4 +668,98 @@ export const stockController = {
         .json({ success: false, message: "Internal server error" });
     }
   },
+  async checkSingleStock(req: Request, res: Response) {
+    try {
+      const { stockId, quantity = 1 } = req.query;
+      if (!stockId) {
+        return res.status(400).json({
+          success: false,
+          message: "stockId is required",
+        });
+      }
+
+      const id = parseInt(stockId as string);
+      const qty = parseInt(quantity as string) || 1;
+
+      const stock = await prisma.stock.findUnique({
+        where: { id },
+        include: {
+          variant: {
+            include: { product: true },
+          },
+        },
+      });
+
+      if (!stock) {
+        return res.status(404).json({
+          success: false,
+          message: "Stock not found",
+          data: { stockId: id, available: false, currentQty: 0 },
+        });
+      }
+
+      const available = stock.currentQty >= qty;
+      res.json({
+        success: true,
+        data: {
+          stockId: id,
+          available,
+          currentQty: stock.currentQty,
+          productName: stock.variant.product.name,
+          message: available ? "Available" : `Only ${stock.currentQty} left`,
+        },
+      });
+    } catch (error: any) {
+      console.error("Check single stock error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+  async checkBulkStock(req: Request, res: Response) {
+    try {
+      const { items } = req.body; // [{ stockId, quantity }]
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Items array required with stockId and quantity",
+        });
+      }
+
+      const results = await Promise.all(
+        items.map(async ({ stockId, quantity }) => {
+          const stock = await prisma.stock.findUnique({
+            where: { id: stockId },
+            include: {
+              variant: {
+                include: { product: true },
+              },
+            },
+          });
+
+          if (!stock) {
+            return {
+              stockId,
+              available: false,
+              currentQty: 0,
+              productName: "Unknown",
+              message: "Stock not found",
+            };
+          }
+
+          const available = stock.currentQty >= quantity;
+          return {
+            stockId,
+            available,
+            currentQty: stock.currentQty,
+            productName: stock.variant.product.name,
+            message: available ? "Available" : `Only ${stock.currentQty} left`,
+          };
+        }),
+      );
+
+      res.json({ success: true, data: results });
+    } catch (error: any) {
+      console.error("Check bulk stock error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 };

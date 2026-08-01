@@ -5,21 +5,54 @@ import fs from "fs";
 
 const SETTINGS_KEY = "web_settings";
 
-// ----- Helpers -----
+// ----- Helpers (with debug logs & safe JSON handling) -----
 async function getWebSettings(): Promise<any> {
+  console.log(`🔍 Fetching settings with key: "${SETTINGS_KEY}"`);
   const setting = await prisma.setting.findUnique({
     where: { key: SETTINGS_KEY },
   });
+
   if (!setting) {
+    console.warn(
+      `⚠️ No setting found for key "${SETTINGS_KEY}", returning default.`,
+    );
     return {
       logoUrl: null,
       socialLinks: { facebook: "", instagram: "", youtube: "", website: "" },
       footerText: "",
     };
   }
+
+  console.log(
+    `✅ Raw value from DB (length: ${setting.value.length}):`,
+    setting.value,
+  );
+
   try {
-    return JSON.parse(setting.value);
-  } catch {
+    const parsed = JSON.parse(setting.value);
+    console.log(`✅ Parsed successfully:`, parsed);
+    return parsed;
+  } catch (error: any) {
+    console.error(`❌ Failed to parse JSON:`, error.message);
+    // Attempt to repair common truncation (e.g., missing closing braces)
+    let repaired = setting.value;
+    // If it ends with incomplete string, try to close it
+    if (!repaired.endsWith("}")) {
+      console.warn(
+        `🔧 Attempting to repair JSON by adding missing closing brace...`,
+      );
+      repaired = repaired + "}";
+      try {
+        const parsed = JSON.parse(repaired);
+        console.log(`✅ Repaired JSON successfully:`, parsed);
+        // Optionally save the repaired version back to DB
+        await saveWebSettings(parsed);
+        return parsed;
+      } catch (e2) {
+        console.error(`❌ Failed to repair JSON, returning default.`);
+      }
+    }
+    // Fallback default
     return {
       logoUrl: null,
       socialLinks: { facebook: "", instagram: "", youtube: "", website: "" },
@@ -29,14 +62,22 @@ async function getWebSettings(): Promise<any> {
 }
 
 async function saveWebSettings(data: any): Promise<void> {
+  const jsonString = JSON.stringify(data);
+  // Validate JSON
+  try {
+    JSON.parse(jsonString);
+  } catch (e) {
+    throw new Error("Invalid JSON data – cannot save");
+  }
+  console.log(`💾 Saving settings (length: ${jsonString.length}):`, jsonString);
   await prisma.setting.upsert({
     where: { key: SETTINGS_KEY },
-    update: { value: JSON.stringify(data) },
-    create: { key: SETTINGS_KEY, value: JSON.stringify(data), type: "json" },
+    update: { value: jsonString },
+    create: { key: SETTINGS_KEY, value: jsonString, type: "json" },
   });
+  console.log(`✅ Settings saved.`);
 }
 
-// Helper to delete a file
 function deleteFile(filePath: string): void {
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -50,7 +91,6 @@ export const webSettingsController = {
   async getSettings(req: Request, res: Response) {
     try {
       const data = await getWebSettings();
-      // Ensure logoUrl is absolute if present and relative
       if (data.logoUrl && !data.logoUrl.startsWith("http")) {
         const baseUrl = `${req.protocol}://${req.get("host")}`;
         data.logoUrl = `${baseUrl}${data.logoUrl.startsWith("/") ? "" : "/"}${data.logoUrl}`;
@@ -69,46 +109,48 @@ export const webSettingsController = {
     let oldLogoPath: string | null = null;
 
     try {
-      const { socialLinks, footerText } = req.body;
-      const file = req.file; // multer already saved to disk if provided
+      const { socialLinks, footerText, logoUrl } = req.body;
+      const file = req.file;
+
+      // 🔍 DEBUG — remove once confirmed working
+      console.log("📥 Content-Type:", req.headers["content-type"]);
+      console.log("📥 req.file:", file);
+      console.log("📥 req.body keys:", Object.keys(req.body));
+
       const baseUrl = `${req.protocol}://${req.get("host")}`;
 
-      // 1. Parse socialLinks early (so we can delete file on error)
-      let parsedSocial = {};
+      // 1. Load current settings
+      const current = await getWebSettings();
+
+      // 2. Merge social links
+      let parsedSocial = current.socialLinks || {
+        facebook: "",
+        instagram: "",
+        youtube: "",
+        website: "",
+      };
       if (socialLinks) {
         try {
-          parsedSocial = JSON.parse(socialLinks);
+          const incoming = JSON.parse(socialLinks);
+          parsedSocial = { ...parsedSocial, ...incoming };
         } catch (parseError) {
-          // If file was uploaded, delete it before responding
-          if (file) {
-            deleteFile(file.path);
-          }
+          if (file) deleteFile(file.path);
           return res.status(400).json({
             success: false,
             message: "Invalid socialLinks JSON",
           });
         }
       }
-      const defaultSocial = {
-        facebook: "",
-        instagram: "",
-        youtube: "",
-        website: "",
-      };
-      const social = { ...defaultSocial, ...parsedSocial };
 
-      // 2. Get current settings
-      const current = await getWebSettings();
+      // 3. Merge footer text
+      const mergedFooterText =
+        footerText !== undefined ? footerText : current.footerText || "";
 
-      // 3. Prepare new logo URL and old logo path (if any)
-      let newLogoUrl: string | null = null;
+      // 4. Logo processing
+      let newLogoUrl: string | null = current.logoUrl;
 
-      if (file) {
-        // Store file path for cleanup on error
-        filePath = file.path;
-        newLogoUrl = `${baseUrl}/uploads/logo/${file.filename}`;
-
-        // Record old logo path (to delete later after DB success)
+      if (logoUrl !== undefined && (logoUrl === "" || logoUrl === "null")) {
+        newLogoUrl = null;
         if (current.logoUrl) {
           let relativePath = current.logoUrl;
           if (relativePath.startsWith("http")) {
@@ -116,58 +158,85 @@ export const webSettingsController = {
               const url = new URL(relativePath);
               relativePath = url.pathname;
             } catch {
-              // If parsing fails, assume it's already relative
+              // ignore
             }
           }
-          // Ensure it starts with '/'
+          const oldPath = relativePath.startsWith("/")
+            ? relativePath
+            : `/${relativePath}`;
+          const fullOldPath = path.join(process.cwd(), "public", oldPath);
+          deleteFile(fullOldPath);
+        }
+      }
+
+      if (file) {
+        filePath = file.path;
+        newLogoUrl = `${baseUrl}/uploads/logo/${file.filename}`;
+        console.log("✅ New logo URL set to:", newLogoUrl); // 🔍 DEBUG
+        if (current.logoUrl) {
+          let relativePath = current.logoUrl;
+          if (relativePath.startsWith("http")) {
+            try {
+              const url = new URL(relativePath);
+              relativePath = url.pathname;
+            } catch {
+              // ignore
+            }
+          }
           oldLogoPath = relativePath.startsWith("/")
             ? relativePath
             : `/${relativePath}`;
         }
+      } else {
+        console.log("⚠️ No file received in this request"); // 🔍 DEBUG
       }
 
-      // 4. Build updated data
       const updatedData = {
-        logoUrl: newLogoUrl || current.logoUrl || null,
-        socialLinks: social,
-        footerText:
-          footerText !== undefined ? footerText : current.footerText || "",
+        logoUrl: newLogoUrl,
+        socialLinks: parsedSocial,
+        footerText: mergedFooterText,
       };
 
-      // Ensure logoUrl is absolute (for response) when no new file
-      if (
-        !file &&
-        updatedData.logoUrl &&
-        !updatedData.logoUrl.startsWith("http")
-      ) {
-        updatedData.logoUrl = `${baseUrl}${updatedData.logoUrl.startsWith("/") ? "" : "/"}${updatedData.logoUrl}`;
-      }
-
-      // 5. Save to DB
       await saveWebSettings(updatedData);
 
-      // 6. If DB success and a new file was uploaded, delete old logo
       if (file && oldLogoPath) {
         const fullOldPath = path.join(process.cwd(), "public", oldLogoPath);
         deleteFile(fullOldPath);
       }
 
-      // 7. Return success
+      const responseData = { ...updatedData };
+      if (responseData.logoUrl && !responseData.logoUrl.startsWith("http")) {
+        responseData.logoUrl = `${baseUrl}${responseData.logoUrl.startsWith("/") ? "" : "/"}${responseData.logoUrl}`;
+      }
+
       res.json({
         success: true,
-        data: updatedData,
+        data: responseData,
         message: "Settings updated successfully",
       });
     } catch (error: any) {
-      // On any error, delete the newly uploaded file (if any)
-      if (filePath) {
-        deleteFile(filePath);
-      }
+      if (filePath) deleteFile(filePath);
       console.error("Update settings error:", error);
       res.status(500).json({
         success: false,
         message: error.message || "Failed to update settings",
       });
+    }
+  },
+
+  async getPublicSettings(req: Request, res: Response) {
+    try {
+      const data = await getWebSettings();
+      if (data.logoUrl && !data.logoUrl.startsWith("http")) {
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
+        data.logoUrl = `${baseUrl}${data.logoUrl.startsWith("/") ? "" : "/"}${data.logoUrl}`;
+      }
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Get public settings error:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch settings" });
     }
   },
 };

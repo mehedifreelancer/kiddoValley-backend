@@ -76,5 +76,6 @@ router.get("/product/:slug", productController.getBySlug);
  *         description: List of force order products
  */
 router.get("/products/force-order", productController.getForceOrder);
+router.get("/products/related/:id", productController.getRelatedProducts);
 
 export default router;

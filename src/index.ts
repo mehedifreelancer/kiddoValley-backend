@@ -26,6 +26,7 @@ import webSettingsRoutes from "./routes/admin/webSettings";
 import adminHeroSliderRoutes from "./routes/admin/heroSliders";
 import publicHeroSliderRoutes from "./routes/public/heroSliders";
 import publicOrderRoutes from "./routes/public/orders";
+import publicWebSettingsRoutes from "./routes/public/webSettings";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -112,6 +113,7 @@ app.use("/api/admin/pathao", pathaoRoutes);
 app.use("/api/admin/customers", adminAuth, customerRoutes);
 app.use("/api/admin/suppliers", adminAuth, supplierRoutes);
 app.use("/api/admin/web-settings", adminAuth, webSettingsRoutes);
+app.use("/api/public/web-settings", publicWebSettingsRoutes);
 app.use("/api/admin/banner-sliders", adminAuth, sliderRoutes);
 app.use("/api/admin/hero-sliders", adminAuth, adminHeroSliderRoutes);
 app.use("/api/public/hero-sliders", publicHeroSliderRoutes);

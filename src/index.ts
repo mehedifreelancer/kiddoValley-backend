@@ -27,6 +27,7 @@ import adminHeroSliderRoutes from "./routes/admin/heroSliders";
 import publicHeroSliderRoutes from "./routes/public/heroSliders";
 import publicOrderRoutes from "./routes/public/orders";
 import publicWebSettingsRoutes from "./routes/public/webSettings";
+import publicStockRoutes from "./routes/public/stock";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -104,6 +105,7 @@ app.use("/api/admin/categories", adminAuth, adminCategoryRoutes);
 app.use("/api/admin/products", adminAuth, adminProductRoutes);
 app.use("/api/admin", adminAuth, adminBarcodeRoutes);
 app.use("/api/admin/stock", adminAuth, adminStockRoutes);
+app.use("/api/public/stock", publicStockRoutes);
 app.use("/api/admin/manufactures", adminAuth, manufactureRoutes);
 app.use("/api/admin/attributes", adminAuth, attributeRoutes);
 app.use("/api/admin/variant", adminAuth, adminVariantRoutes);

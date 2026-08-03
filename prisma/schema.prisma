@@ -143,7 +143,7 @@ model Order {
   customerName    String
   customerPhone   String
   customerPhone2  String?
-  customerAddress String
+  customerAddress String  
   deliveryDate    DateTime?
 
   // ✅ নতুন ফিল্ড

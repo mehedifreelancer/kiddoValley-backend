@@ -28,6 +28,9 @@ import publicHeroSliderRoutes from "./routes/public/heroSliders";
 import publicOrderRoutes from "./routes/public/orders";
 import publicWebSettingsRoutes from "./routes/public/webSettings";
 import publicStockRoutes from "./routes/public/stock";
+import publicOrderTrackingRoutes from "./routes/public/orderTracking";
+import adminOrderTrackingRoutes from "./routes/admin/orderTracking";
+import adminReportRoutes from "./routes/admin/dashboard";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -119,6 +122,9 @@ app.use("/api/public/web-settings", publicWebSettingsRoutes);
 app.use("/api/admin/banner-sliders", adminAuth, sliderRoutes);
 app.use("/api/admin/hero-sliders", adminAuth, adminHeroSliderRoutes);
 app.use("/api/public/hero-sliders", publicHeroSliderRoutes);
+app.use("/api/public/order-tracking", publicOrderTrackingRoutes);
+app.use("/api/admin/order-tracking", adminOrderTrackingRoutes);
+app.use("/api/admin/dashboard", adminAuth, adminReportRoutes);
 
 // Health check
 app.get("/", (req: Request, res: Response) => {

@@ -50,6 +50,55 @@ export const customerController = {
     }
   },
 
+  // ✅ CREATE customer
+  async createCustomer(req: Request, res: Response) {
+    try {
+      const {
+        phone,
+        name,
+        address,
+        secondaryPhone,
+        gender,
+        hasBaby,
+        preferredToy,
+      } = req.body;
+
+      if (!phone || !name || !address) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone, name and address are required",
+        });
+      }
+
+      // Check if customer already exists
+      const existing = await prisma.customerInfo.findUnique({
+        where: { phone },
+      });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: "Customer with this phone already exists",
+        });
+      }
+
+      const customer = await prisma.customerInfo.create({
+        data: {
+          phone,
+          name,
+          address,
+          secondaryPhone,
+          gender,
+          hasBaby,
+          preferredToy,
+        },
+      });
+      res.status(201).json({ success: true, data: customer });
+    } catch (error: any) {
+      console.error("Create customer error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
   // UPDATE customer
   async updateCustomer(req: Request, res: Response) {
     try {

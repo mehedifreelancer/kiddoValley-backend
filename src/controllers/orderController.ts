@@ -17,7 +17,7 @@ interface OrderItemInput {
 // ✅ পাথাও সক্রিয় কিনা চেক করুন
 const isPathaoActive = process.env.PATHAO_ACTIVE === "true";
 
-// ----- Helper: get or create customer -----
+// ----- Helper: get or create customer (now using upsert) -----
 const getOrCreateCustomer = async (
   phone: string,
   name: string,
@@ -27,29 +27,29 @@ const getOrCreateCustomer = async (
   hasBaby?: boolean,
   preferredToy?: string,
 ) => {
-  let customer = await prisma.customerInfo.findUnique({ where: { phone } });
-  if (!customer) {
-    customer = await prisma.customerInfo.create({
-      data: {
-        phone,
-        name,
-        address,
-        secondaryPhone,
-        gender,
-        hasBaby,
-        preferredToy,
-      },
-    });
-  } else {
-    await prisma.customerInfo.update({
-      where: { phone },
-      data: { name, address, secondaryPhone, gender, hasBaby, preferredToy },
-    });
-  }
-  return customer;
+  // Using upsert to avoid race conditions and duplicate errors
+  return await prisma.customerInfo.upsert({
+    where: { phone },
+    update: {
+      name,
+      address,
+      secondaryPhone,
+      gender,
+      hasBaby,
+      preferredToy,
+    },
+    create: {
+      phone,
+      name,
+      address,
+      secondaryPhone,
+      gender,
+      hasBaby,
+      preferredToy,
+    },
+  });
 };
 
-// ----- Helper: send email -----
 // ----- Helper: send email (updated) -----
 const sendOrderEmail = async (order: any) => {
   const baseUrl = process.env.API_BASE_URL || "http://localhost:4000";
@@ -195,15 +195,22 @@ export const orderController = {
         });
       }
 
-      const customer = await getOrCreateCustomer(
-        customerPhone,
-        customerName,
-        customerAddress,
-        customerPhone2,
-        gender,
-        hasBaby,
-        preferredToy,
-      );
+      // 🔥 কাস্টমার তৈরি – ব্যর্থ হলে log + null (অর্ডার বাধাগ্রস্ত হবে না)
+      let customer = null;
+      try {
+        customer = await getOrCreateCustomer(
+          customerPhone,
+          customerName,
+          customerAddress,
+          customerPhone2,
+          gender,
+          hasBaby,
+          preferredToy,
+        );
+      } catch (err) {
+        console.error("❌ Customer creation failed:", err);
+        // customer null থাকবে
+      }
 
       const order = await prisma.$transaction(async (tx) => {
         // Stock check and reduce
@@ -238,7 +245,7 @@ export const orderController = {
             customerPhone,
             customerPhone2,
             customerAddress,
-            orderedByPhone: customer.phone,
+            orderedByPhone: customer?.phone || null, // ✅ fallback null
             deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
             paymentStatus: "paid",
             orderStatus: "new",
@@ -301,7 +308,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 2. CONFIRM ORDER (existing order -> 'confirmed' + Pathao conditional) --------------------
+  // -------------------- 2. CONFIRM ORDER --------------------
   async confirmOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -336,7 +343,6 @@ export const orderController = {
       let pathaoResult = null;
       let pathaoError = null;
 
-      // ✅ শুধুমাত্র PATHAO_ACTIVE=true থাকলেই পাথাও কল হবে
       if (isPathaoActive) {
         const totalQuantity = order.soldItems.reduce(
           (sum, item) => sum + item.quantity,
@@ -360,20 +366,15 @@ export const orderController = {
         } catch (err: any) {
           pathaoError = err.message;
           console.error("❌ Pathao creation failed:", pathaoError);
-          // যদি পাথাও ডিজেবল না থাকে কিন্তু কল ফেল করে, তবে আমরা অর্ডার কনফর্ম করব না
-          // কারণ এটা ইচ্ছাকৃত সিদ্ধান্ত – আপনি চাইলে এখানে throw করতে পারেন
           return res.status(500).json({
             success: false,
             message: "Pathao booking failed: " + pathaoError,
           });
         }
       } else {
-        console.log(
-          "ℹ️ Pathao is disabled (PATHAO_ACTIVE != true) – skipping Pathao booking.",
-        );
+        console.log("ℹ️ Pathao is disabled – skipping Pathao booking.");
       }
 
-      // অর্ডার আপডেট
       const updateData: any = {
         orderStatus: "confirmed",
       };
@@ -382,7 +383,6 @@ export const orderController = {
         updateData.pathaoConsignmentId = pathaoResult.consignment_id;
         updateData.pathaoLastSyncedAt = new Date();
       } else {
-        // পাথাও ডিজেবল থাকলে বা ফেল করলে, ডেলিভারি স্ট্যাটাস সেট করবেন না
         updateData.deliveryStatus = null;
       }
 
@@ -442,17 +442,22 @@ export const orderController = {
         });
       }
 
-      const customer = await getOrCreateCustomer(
-        customerPhone,
-        customerName,
-        customerAddress,
-        customerPhone2,
-        gender,
-        hasBaby,
-        preferredToy,
-      );
+      // 🔥 কাস্টমার তৈরি – ব্যর্থ হলে log + null
+      let customer = null;
+      try {
+        customer = await getOrCreateCustomer(
+          customerPhone,
+          customerName,
+          customerAddress,
+          customerPhone2,
+          gender,
+          hasBaby,
+          preferredToy,
+        );
+      } catch (err) {
+        console.error("❌ Customer creation failed:", err);
+      }
 
-      // 1) Create order (status 'confirmed')
       const order = await prisma.$transaction(async (tx) => {
         // Stock check and reduce
         const stockUpdates = await Promise.all(
@@ -482,7 +487,7 @@ export const orderController = {
             customerPhone,
             customerPhone2,
             customerAddress,
-            orderedByPhone: customer.phone,
+            orderedByPhone: customer?.phone || null,
             deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
             paymentStatus: "paid",
             orderStatus: "confirmed",
@@ -535,7 +540,7 @@ export const orderController = {
         return newOrder;
       });
 
-      // 2) Pathao order creation (conditional)
+      // Pathao order creation (conditional)
       let pathaoResult = null;
       if (isPathaoActive) {
         const totalQuantity = items.reduce(
@@ -559,13 +564,9 @@ export const orderController = {
           console.log("✅ Pathao order created:", pathaoResult.consignment_id);
         } catch (err: any) {
           console.error("❌ Pathao creation failed:", err.message);
-          // পাথাও ফেল করলে আমরা অর্ডার তো বানিয়েছি, তাই শুধু লগ রেখে চালিয়ে যাই
-          // কিন্তু আপনি চাইলে এখানে throw করতে পারেন
         }
       } else {
-        console.log(
-          "ℹ️ Pathao is disabled (PATHAO_ACTIVE != true) – skipping Pathao booking.",
-        );
+        console.log("ℹ️ Pathao is disabled – skipping Pathao booking.");
       }
 
       let updatedOrder = order;
@@ -580,7 +581,6 @@ export const orderController = {
           include: { soldItems: true },
         });
       } else {
-        // পাথাও ডিজেবল বা ফেল থাকলে ডেলিভারি স্ট্যাটাস null রাখুন
         updatedOrder =
           (await prisma.order.findUnique({
             where: { id: order.id },
@@ -607,7 +607,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 4. CANCEL ORDER (with conditional Pathao cancel) --------------------
+  // -------------------- 4. CANCEL ORDER --------------------
   async cancelOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -632,7 +632,6 @@ export const orderController = {
           .json({ success: false, message: "Order already cancelled" });
       }
 
-      // ✅ Pathao cancel only if active and consignment exists
       if (isPathaoActive && order.pathaoConsignmentId) {
         try {
           await pathaoService.cancelOrder(order.pathaoConsignmentId);
@@ -687,7 +686,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 5. DELETE ORDER (hard delete, only if cancelled) --------------------
+  // -------------------- 5. DELETE ORDER --------------------
   async deleteOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -752,7 +751,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 7. LIST ORDERS (with pagination & search) --------------------
+  // -------------------- 7. LIST ORDERS --------------------
   async getOrders(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -823,20 +822,25 @@ export const orderController = {
         });
       }
 
-      const customer = await getOrCreateCustomer(
-        customerPhone,
-        customerName,
-        customerAddress,
-        customerPhone2,
-        gender,
-        hasBaby,
-        preferredToy,
-      );
+      // 🔥 কাস্টমার তৈরি – ব্যর্থ হলে log + null
+      let customer = null;
+      try {
+        customer = await getOrCreateCustomer(
+          customerPhone,
+          customerName,
+          customerAddress,
+          customerPhone2,
+          gender,
+          hasBaby,
+          preferredToy,
+        );
+      } catch (err) {
+        console.error("❌ Customer creation failed:", err);
+      }
 
       const isSuspicious = total > 2000;
 
       const order = await prisma.$transaction(async (tx) => {
-        // Stock check and reduce
         const stockUpdates = await Promise.all(
           items.map(async (item: OrderItemInput) => {
             const stock = await tx.stock.findUnique({
@@ -864,7 +868,7 @@ export const orderController = {
             customerPhone,
             customerPhone2,
             customerAddress,
-            orderedByPhone: customer.phone,
+            orderedByPhone: customer?.phone || null,
             deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
             paymentStatus: "paid",
             orderStatus: "new",
@@ -960,7 +964,7 @@ export const orderController = {
     }
   },
 
-  // -------------------- 10. UPDATE ORDER (with items & stock adjustment) --------------------
+  // -------------------- 10. UPDATE ORDER --------------------
   async updateOrder(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -976,13 +980,12 @@ export const orderController = {
         customerPhone2,
         customerAddress,
         deliveryDate,
-        items, // অর্ডারের নতুন আইটেম লিস্ট
+        items,
         subtotal,
         discountTotal,
         total,
       } = req.body;
 
-      // existing order with soldItems
       const existingOrder = await prisma.order.findUnique({
         where: { id: orderId },
         include: { soldItems: true },
@@ -1003,7 +1006,6 @@ export const orderController = {
           .json({ success: false, message: "Only 'new' orders can be edited" });
       }
 
-      // Validate items
       if (!items || items.length === 0) {
         return res.status(400).json({
           success: false,
@@ -1054,7 +1056,6 @@ export const orderController = {
           }),
         );
 
-        // Create new soldItems with snapshot
         for (const { stock, item } of stockUpdates) {
           await tx.soldItem.create({
             data: {
@@ -1072,7 +1073,6 @@ export const orderController = {
           });
         }
 
-        // 4) StockMovement for new deductions
         for (const { stock, item } of stockUpdates) {
           await tx.stockMovement.create({
             data: {
@@ -1086,7 +1086,6 @@ export const orderController = {
           });
         }
 
-        // 5) Update order info (customer, totals)
         const updatedOrder = await tx.order.update({
           where: { id: orderId },
           data: {

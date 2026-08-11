@@ -42,7 +42,7 @@ function transformProductForPublic(product: any) {
     return {
       id: variant.id,
       sku: variant.sku,
-      stockId: firstStock.id || null, // ✅ stockId যোগ করা হলো
+      stockId: firstStock.id || null,
       price: firstStock.sellingPrice || 0,
       discount: firstStock.discountPercent || 0,
       inStock: inStock,
@@ -99,7 +99,8 @@ function transformProductForPublic(product: any) {
     categoryId: product.categoryId,
     description: product.description,
     videoUrl: product.videoUrl,
-    thumbnailImage: thumbnailImage, // ✅ আনকমেন্ট করা হলো
+    thumbnailImage: thumbnailImage,
+    weight: product.weight,
     variants: variants,
     attributeOrderByPriority: attributeOrderByPriority,
     isForceOrder: product.isForceOrder,
@@ -387,10 +388,10 @@ export const productController = {
         description,
         forceOrderPriority,
         attributePriority,
+        weight,
       } = req.body;
       const file = req.file as Express.Multer.File;
 
-      // --- Validation ---
       if (!name || typeof name !== "string" || name.trim() === "") {
         return res
           .status(400)
@@ -432,7 +433,6 @@ export const productController = {
         });
       }
 
-      // --- Thumbnail ---
       let thumbnail: string | null = null;
       if (file) {
         savedFilenames = saveImagesToDisk([file]);
@@ -468,6 +468,7 @@ export const productController = {
             videoUrl: videoUrl || null,
             description: description || null,
             thumbnail,
+            weight: weight !== undefined ? parseFloat(weight) : null,
             isForceOrder:
               (forceOrderPriority && parseInt(forceOrderPriority) > 0) || false,
             forceOrderPriority: parseInt(forceOrderPriority) || 0,
@@ -557,6 +558,7 @@ export const productController = {
         "forceOrderPriority",
         "categoryId",
         "attributePriority",
+        "weight",
       ];
       for (const field of allowedFields) {
         if (req.body[field] !== undefined) updateData[field] = req.body[field];
@@ -587,6 +589,10 @@ export const productController = {
 
       if (updateData.forceOrderPriority !== undefined) {
         updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
+      }
+
+      if (updateData.weight !== undefined) {
+        updateData.weight = parseFloat(updateData.weight) || null;
       }
 
       let thumbnail: string | null = req.body.existingThumbnail || null;
@@ -763,7 +769,7 @@ export const productController = {
     }
   },
 
-  // ==================== DELETE ====================
+  // ==================== DELETE (FIXED - removes variant images too) ====================
   async delete(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
@@ -794,14 +800,51 @@ export const productController = {
         });
       }
 
-      const thumbnailPath = product.thumbnail
-        ? path.join(
+      // ---- DELETE IMAGES FROM DISK ----
+      // 1. Delete product thumbnail
+      if (product.thumbnail) {
+        const filename = product.thumbnail.split("/").pop();
+        if (filename) {
+          const filePath = path.join(
             process.cwd(),
-            "public",
-            product.thumbnail.replace(/^https?:\/\/[^\/]+\//, ""),
-          )
-        : null;
+            "public/uploads/product-images",
+            filename,
+          );
+          try {
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          } catch (err) {
+            console.warn("Failed to delete thumbnail:", filename);
+          }
+        }
+      }
 
+      // 2. Delete variant images
+      const variants = await prisma.variant.findMany({
+        where: { productId: id },
+        select: { images: true },
+      });
+      for (const variant of variants) {
+        const images = variant.images as any[];
+        if (images && images.length > 0) {
+          for (const img of images) {
+            const filename = img.imgUrl.split("/").pop();
+            if (filename) {
+              const filePath = path.join(
+                process.cwd(),
+                "public/uploads/product-images",
+                filename,
+              );
+              try {
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+              } catch (err) {
+                console.warn("Failed to delete variant image:", filename);
+              }
+            }
+          }
+        }
+      }
+
+      // ---- DELETE DATABASE RECORDS ----
       await prisma.$transaction(async (tx) => {
         const variantIds = product.variants.map((v) => v.id);
         if (variantIds.length) {
@@ -819,10 +862,6 @@ export const productController = {
         await tx.manufacture.deleteMany({ where: { productId: id } });
         await tx.product.delete({ where: { id } });
       });
-
-      if (thumbnailPath && fs.existsSync(thumbnailPath)) {
-        fs.unlinkSync(thumbnailPath);
-      }
 
       res.json({
         success: true,
@@ -1004,6 +1043,7 @@ export const productController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+
   // ==================== RELATED PRODUCTS ====================
   async getRelatedProducts(req: Request, res: Response) {
     try {
@@ -1014,7 +1054,6 @@ export const productController = {
           .json({ success: false, message: "Invalid product ID" });
       }
 
-      // Get the product to find its category
       const product = await prisma.product.findUnique({
         where: { id: productId },
         select: { categoryId: true },
@@ -1025,7 +1064,6 @@ export const productController = {
           .json({ success: false, message: "Product not found" });
       }
 
-      // Fetch related products from same category, excluding current, limit to 10
       const relatedProducts = await prisma.product.findMany({
         where: {
           categoryId: product.categoryId,
@@ -1064,12 +1102,10 @@ export const productController = {
       res.json({ success: true, data: transformed });
     } catch (error: any) {
       console.error("Get related products error:", error);
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: error.message || "Failed to fetch related products",
-        });
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to fetch related products",
+      });
     }
   },
 };

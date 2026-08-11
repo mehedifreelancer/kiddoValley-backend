@@ -21,6 +21,7 @@ CREATE TABLE `categories` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
     `slug` VARCHAR(191) NOT NULL,
+    `attributePriority` JSON NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
@@ -42,7 +43,7 @@ CREATE TABLE `barcodes` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `products` (
+CREATE TABLE `Product` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
     `slug` VARCHAR(191) NOT NULL,
@@ -51,12 +52,14 @@ CREATE TABLE `products` (
     `videoUrl` VARCHAR(191) NULL,
     `thumbnail` VARCHAR(191) NULL,
     `isForceOrder` BOOLEAN NOT NULL DEFAULT false,
+    `weight` DOUBLE NULL,
     `forceOrderPriority` INTEGER NOT NULL DEFAULT 0,
     `isPublished` BOOLEAN NOT NULL DEFAULT false,
+    `attributePriority` JSON NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `products_slug_key`(`slug`),
+    UNIQUE INDEX `Product_slug_key`(`slug`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -137,14 +140,17 @@ CREATE TABLE `Order` (
     `customerPhone2` VARCHAR(191) NULL,
     `customerAddress` VARCHAR(191) NOT NULL,
     `deliveryDate` DATETIME(3) NULL,
+    `orderStatus` VARCHAR(191) NOT NULL DEFAULT 'new',
+    `isWebsiteOrder` BOOLEAN NOT NULL DEFAULT false,
+    `isSuspicious` BOOLEAN NOT NULL DEFAULT false,
     `paymentStatus` VARCHAR(191) NOT NULL DEFAULT 'pending',
     `deliveryStatus` VARCHAR(191) NULL DEFAULT 'Pending',
     `pathaoInvoiceId` VARCHAR(191) NULL,
     `pathaoConsignmentId` VARCHAR(191) NULL,
     `pathaoLastSyncedAt` DATETIME(3) NULL,
+    `orderedByPhone` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
-    `orderedByPhone` VARCHAR(191) NULL,
 
     UNIQUE INDEX `Order_invoiceNo_key`(`invoiceNo`),
     UNIQUE INDEX `Order_pathaoConsignmentId_key`(`pathaoConsignmentId`),
@@ -152,15 +158,18 @@ CREATE TABLE `Order` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `sold_items` (
+CREATE TABLE `SoldItem` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `orderId` INTEGER NOT NULL,
-    `productId` INTEGER NOT NULL,
-    `variantId` INTEGER NULL,
-    `stockId` INTEGER NOT NULL,
-    `quantity` INTEGER NOT NULL,
+    `productName` VARCHAR(191) NOT NULL,
+    `variantSku` VARCHAR(191) NOT NULL,
+    `variantAttributes` JSON NULL,
     `unitPrice` DOUBLE NOT NULL,
     `totalPrice` DOUBLE NOT NULL,
+    `quantity` INTEGER NOT NULL,
+    `productId` INTEGER NULL,
+    `variantId` INTEGER NULL,
+    `stockId` INTEGER NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`)
@@ -194,10 +203,10 @@ CREATE TABLE `product_suppliers` (
 
 -- CreateTable
 CREATE TABLE `settings` (
-    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `id` VARCHAR(191) NOT NULL,
     `key` VARCHAR(191) NOT NULL,
-    `value` VARCHAR(191) NOT NULL,
-    `type` VARCHAR(191) NOT NULL DEFAULT 'string',
+    `value` TEXT NOT NULL,
+    `type` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
@@ -272,10 +281,10 @@ CREATE TABLE `product_attributes` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `products` ADD CONSTRAINT `products_categoryId_fkey` FOREIGN KEY (`categoryId`) REFERENCES `categories`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `Product` ADD CONSTRAINT `Product_categoryId_fkey` FOREIGN KEY (`categoryId`) REFERENCES `categories`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `variants` ADD CONSTRAINT `variants_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `variants` ADD CONSTRAINT `variants_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `Product`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `stocks` ADD CONSTRAINT `stocks_variantId_fkey` FOREIGN KEY (`variantId`) REFERENCES `variants`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -287,16 +296,16 @@ ALTER TABLE `stock_movements` ADD CONSTRAINT `stock_movements_stockId_fkey` FORE
 ALTER TABLE `Order` ADD CONSTRAINT `Order_orderedByPhone_fkey` FOREIGN KEY (`orderedByPhone`) REFERENCES `CustomerInfo`(`phone`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `Order`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `SoldItem` ADD CONSTRAINT `SoldItem_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `Order`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `SoldItem` ADD CONSTRAINT `SoldItem_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `product_suppliers` ADD CONSTRAINT `product_suppliers_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `product_suppliers` ADD CONSTRAINT `product_suppliers_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `Product`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `product_suppliers` ADD CONSTRAINT `product_suppliers_supplierId_fkey` FOREIGN KEY (`supplierId`) REFERENCES `suppliers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `manufactures` ADD CONSTRAINT `manufactures_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `manufactures` ADD CONSTRAINT `manufactures_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `Product`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

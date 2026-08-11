@@ -4,13 +4,7 @@ import { saveImagesToDisk } from "../multer";
 import path from "path";
 import { deleteFiles } from "../utils/fileUtils";
 import fs from "fs";
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
+import { generateSlug } from "../utils/slugify";
 
 function generateVariantSku(
   productSlug: string,
@@ -19,7 +13,9 @@ function generateVariantSku(
   const base = `kdv-${productSlug}`;
   // Sort attribute keys alphabetically for consistent order
   const sortedKeys = Object.keys(attributes).sort();
-  const attrPart = sortedKeys.map((key) => slugify(attributes[key])).join("-");
+  const attrPart = sortedKeys
+    .map((key) => generateSlug(attributes[key]))
+    .join("-");
   return attrPart ? `${base}-${attrPart}` : base;
 }
 

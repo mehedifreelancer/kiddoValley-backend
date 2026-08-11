@@ -334,7 +334,6 @@ export const stockController = {
     }
   },
 
-  // ✅ Fixed: replaced images with thumbnail
   async getProductStockList(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -372,7 +371,7 @@ export const stockController = {
         return {
           id: p.id,
           name: p.name,
-          thumbnail: p.thumbnail, // ✅ fixed
+          thumbnail: p.thumbnail,
           category_id: p.categoryId,
           category_name: p.category?.name,
           total_stock: total,
@@ -397,7 +396,6 @@ export const stockController = {
     }
   },
 
-  // ✅ Fixed: replaced images with thumbnail in query
   async advancedFilter(req: Request, res: Response) {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -433,7 +431,6 @@ export const stockController = {
       let orderClause = "ORDER BY total_stock ASC";
       if (sortStock === "high") orderClause = "ORDER BY total_stock DESC";
 
-      // ✅ Fixed: p.images → p.thumbnail
       const query = `
         SELECT 
           p.id,
@@ -668,6 +665,7 @@ export const stockController = {
         .json({ success: false, message: "Internal server error" });
     }
   },
+
   async checkSingleStock(req: Request, res: Response) {
     try {
       const { stockId, quantity = 1 } = req.query;
@@ -714,9 +712,10 @@ export const stockController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+
   async checkBulkStock(req: Request, res: Response) {
     try {
-      const { items } = req.body; // [{ stockId, quantity }]
+      const { items } = req.body;
       if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           success: false,
@@ -760,6 +759,51 @@ export const stockController = {
     } catch (error: any) {
       console.error("Check bulk stock error:", error);
       res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  // ✅ NEW: Update only discount percent for a stock (for Edit button in wizard)
+  async updateDiscount(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid stock ID" });
+      }
+
+      const { discountPercent } = req.body;
+
+      if (discountPercent === undefined || discountPercent === null) {
+        return res.status(400).json({
+          success: false,
+          message: "discountPercent is required",
+        });
+      }
+
+      const existingStock = await prisma.stock.findUnique({
+        where: { id },
+      });
+      if (!existingStock) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
+      }
+
+      const stock = await prisma.stock.update({
+        where: { id },
+        data: {
+          discountPercent: parseFloat(discountPercent) || 0,
+        },
+      });
+
+      res.json({ success: true, data: stock });
+    } catch (error: any) {
+      console.error("Update stock discount error:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update stock discount",
+      });
     }
   },
 };

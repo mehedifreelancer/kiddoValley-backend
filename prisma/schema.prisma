@@ -57,6 +57,7 @@ model Product {
   videoUrl           String?
   thumbnail          String?
   isForceOrder       Boolean  @default(false)
+  weight             Float? // নতুন ফিল্ড, কেজি
   forceOrderPriority Int      @default(0)
   isPublished        Boolean  @default(false)
   attributePriority  Json?    @default("[]") // ✅ যোগ করো
@@ -143,7 +144,7 @@ model Order {
   customerName    String
   customerPhone   String
   customerPhone2  String?
-  customerAddress String  
+  customerAddress String
   deliveryDate    DateTime?
 
   // ✅ নতুন ফিল্ড

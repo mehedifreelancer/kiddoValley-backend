@@ -46,7 +46,6 @@ model Barcode {
   @@map("barcodes")
 }
 
-// schema.prisma - Product মডেলে attributePriority যোগ করুন
 model Product {
   id                 Int      @id @default(autoincrement())
   name               String
@@ -57,16 +56,18 @@ model Product {
   videoUrl           String?
   thumbnail          String?
   isForceOrder       Boolean  @default(false)
-  weight             Float? // নতুন ফিল্ড, কেজি
+  weight             Float? // kg
   forceOrderPriority Int      @default(0)
   isPublished        Boolean  @default(false)
-  attributePriority  Json?    @default("[]") // ✅ যোগ করো
+  attributePriority  Json?    @default("[]")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   variants     Variant[]
   suppliers    ProductSupplier[]
   manufactures Manufacture[]
+
+  @@map("products")
 }
 
 model Variant {
@@ -133,6 +134,8 @@ model CustomerInfo {
   updatedAt      DateTime @updatedAt
 
   orders Order[]
+
+  @@map("customer_infos")
 }
 
 model Order {
@@ -147,10 +150,13 @@ model Order {
   customerAddress String
   deliveryDate    DateTime?
 
-  // ✅ নতুন ফিল্ড
   orderStatus    String  @default("new") // new, confirmed, cancelled
   isWebsiteOrder Boolean @default(false)
   isSuspicious   Boolean @default(false)
+
+  hasRefund     Boolean @default(false)
+  refundStatus  String  @default("none") // "none" | "partial" | "full"
+  totalRefunded Float   @default(0)
 
   paymentStatus       String    @default("pending")
   deliveryStatus      String?   @default("Pending")
@@ -162,8 +168,12 @@ model Order {
   orderedByPhone String?
   customerInfo   CustomerInfo? @relation(fields: [orderedByPhone], references: [phone])
 
+  refunds Refund[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("orders")
 }
 
 model SoldItem {
@@ -171,7 +181,6 @@ model SoldItem {
   orderId Int
   order   Order @relation(fields: [orderId], references: [id])
 
-  // ✅ নতুন Snapshot ফিল্ড
   productName       String
   variantSku        String
   variantAttributes Json?
@@ -179,13 +188,39 @@ model SoldItem {
   totalPrice        Float
   quantity          Int
 
-  // রেফারেন্স (ঐচ্ছিক)
+  refundedAmount  Float   @default(0)
+  isFullyRefunded Boolean @default(false)
+
   productId Int?
   variantId Int?
   stockId   Int?
 
   createdAt DateTime @default(now())
   stock     Stock?   @relation(fields: [stockId], references: [id])
+
+  refunds Refund[]
+
+  @@map("sold_items")
+}
+
+model Refund {
+  id      Int   @id @default(autoincrement())
+  orderId Int
+  order   Order @relation(fields: [orderId], references: [id])
+
+  soldItemId Int?
+  soldItem   SoldItem? @relation(fields: [soldItemId], references: [id])
+
+  type          String // "partial" | "full"
+  amount        Float
+  reason        String // "defect" | "lost" | "other" | ...
+  imageUrl      String? @db.Text
+  transactionId String?
+
+  createdAt DateTime @default(now())
+  createdBy Int?
+
+  @@map("refunds")
 }
 
 model Supplier {
@@ -244,8 +279,8 @@ model HeroSlider {
   badgeText        String
   firstTitle       String
   secondTitle      String
-  firstTitleColor  String // Tailwind class for first title (e.g., "text-purple-600")
-  secondTitleColor String // Tailwind class for second title
+  firstTitleColor  String
+  secondTitleColor String
   description      String
   bookTitle        String
   bookSubtitle     String

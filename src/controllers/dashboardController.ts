@@ -2,8 +2,9 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 
 export const dashboardController = {
-  // ---------- 1. OVERVIEW ----------
-  // ---------- 1. OVERVIEW (with profit & product quantity) ----------
+  // ---------- 1. OVERVIEW (with refund deduction) ----------
+  // dashboardController.ts - শুধু getOverview মেথড আপডেট করা হয়েছে
+
   async getOverview(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -12,57 +13,107 @@ export const dashboardController = {
         endDate as string,
       );
 
+      // শুধু কনফর্মড/প্যাকড/ডেলিভার্ড অর্ডার বিবেচনা করব
       const whereOrder = {
         createdAt: { gte: start, lte: end },
         orderStatus: { in: ["confirmed", "packed", "delivered"] },
       };
 
       // ১. অর্ডার ও গ্রাহক স্ট্যাট
-      const [totalOrders, totalRevenue, totalCustomers] = await Promise.all([
-        prisma.order.count({ where: whereOrder }),
-        prisma.order.aggregate({ where: whereOrder, _sum: { total: true } }),
-        prisma.customerInfo.count({
-          where: {
-            orders: {
-              some: {
-                createdAt: { gte: start, lte: end },
-                orderStatus: { in: ["confirmed", "packed", "delivered"] },
+      const [totalOrders, totalRevenueBeforeRefund, totalCustomers] =
+        await Promise.all([
+          prisma.order.count({ where: whereOrder }),
+          prisma.order.aggregate({
+            where: whereOrder,
+            _sum: { total: true },
+          }),
+          prisma.customerInfo.count({
+            where: {
+              orders: {
+                some: {
+                  createdAt: { gte: start, lte: end },
+                  orderStatus: { in: ["confirmed", "packed", "delivered"] },
+                },
               },
             },
+          }),
+        ]);
+
+      // ২. রিফান্ড স্ট্যাটিস্টিক্স (type অনুযায়ী গ্রুপ)
+      const refundStats = await prisma.refund.groupBy({
+        by: ["type"],
+        where: {
+          order: {
+            createdAt: { gte: start, lte: end },
+            orderStatus: { in: ["confirmed", "packed", "delivered"] },
           },
-        }),
-      ]);
+        },
+        _count: { id: true },
+        _sum: { amount: true },
+      });
 
-      const avgOrderValue =
-        totalOrders > 0 ? (totalRevenue._sum.total || 0) / totalOrders : 0;
+      // ডিফল্ট ০
+      let partialCount = 0;
+      let fullCount = 0;
+      let partialAmount = 0;
+      let fullAmount = 0;
 
-      // ২. মোট লাভ ও মোট পণ্য বিক্রয় (quantity) – Raw SQL ব্যবহার
+      refundStats.forEach((stat) => {
+        if (stat.type === "partial") {
+          partialCount = stat._count.id;
+          partialAmount = stat._sum.amount || 0;
+        } else if (stat.type === "full") {
+          fullCount = stat._count.id;
+          fullAmount = stat._sum.amount || 0;
+        }
+      });
+
+      const totalRefund = partialAmount + fullAmount;
+
+      // ৩. নেট রেভিনিউ
+      const totalRevenue =
+        (totalRevenueBeforeRefund._sum.total || 0) - totalRefund;
+
+      // ৪. মোট লাভ ও পণ্য বিক্রয় (রিফান্ডের আগে)
       const profitAndQuantity: any[] = await prisma.$queryRaw`
       SELECT 
         SUM((s.unitPrice - st.buyingOrMakingPrice) * s.quantity) as totalProfit,
         SUM(s.quantity) as totalProductsSold
-      FROM \`SoldItem\` s
+      FROM \`sold_items\` s
       JOIN \`stocks\` st ON st.id = s.stockId
-      JOIN \`Order\` o ON o.id = s.orderId
+      JOIN \`orders\` o ON o.id = s.orderId
       WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
         AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
     `;
-
-      const totalProfit = Number(profitAndQuantity[0]?.totalProfit) || 0;
+      const totalProfitBeforeRefund =
+        Number(profitAndQuantity[0]?.totalProfit) || 0;
       const totalProductsSold =
         Number(profitAndQuantity[0]?.totalProductsSold) || 0;
+
+      // ৫. নেট লাভ
+      const totalProfit = totalProfitBeforeRefund - totalRefund;
+
+      // ৬. গড় মান
+      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
       const avgProfit = totalOrders > 0 ? totalProfit / totalOrders : 0;
 
       res.json({
         success: true,
         data: {
+          // আগের কার্ডগুলো
           totalOrders,
-          totalRevenue: totalRevenue._sum.total || 0,
+          totalRevenue,
           totalCustomers,
           avgOrderValue,
           totalProfit,
           totalProductsSold,
           avgProfit,
+
+          // ✅ নতুন ৪টি কার্ড
+          totalPartialRefunds: partialCount,
+          totalFullRefunds: fullCount,
+          partialRefundAmount: partialAmount,
+          fullRefundAmount: fullAmount,
         },
       });
     } catch (error: any) {
@@ -80,13 +131,31 @@ export const dashboardController = {
         endDate as string,
       );
 
+      // রিফান্ড বিবেচনায় এনে নেট সেলস ট্রেন্ড
+      // ১. প্রতিদিনের অর্ডার টোটাল
       const orders = await prisma.order.findMany({
         where: {
           createdAt: { gte: start, lte: end },
           orderStatus: { in: ["confirmed", "packed", "delivered"] },
         },
-        select: { createdAt: true, total: true },
+        select: { createdAt: true, total: true, id: true },
         orderBy: { createdAt: "asc" },
+      });
+
+      // ২. প্রতিদিনের রিফান্ড টোটাল
+      const refunds: any[] = await prisma.$queryRaw`
+        SELECT DATE(o.createdAt) as date, SUM(r.amount) as refundAmount
+        FROM \`refunds\` r
+        JOIN \`orders\` o ON o.id = r.orderId
+        WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
+          AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
+        GROUP BY DATE(o.createdAt)
+      `;
+
+      const refundMap: Record<string, number> = {};
+      refunds.forEach((r) => {
+        const date = new Date(r.date).toISOString().split("T")[0];
+        refundMap[date] = Number(r.refundAmount) || 0;
       });
 
       const grouped: Record<string, number> = {};
@@ -95,9 +164,10 @@ export const dashboardController = {
         grouped[date] = (grouped[date] || 0) + order.total;
       });
 
+      // নেট সেলস = অর্ডার টোটাল - রিফান্ড
       const data = Object.keys(grouped).map((date) => ({
         date,
-        total: grouped[date],
+        total: grouped[date] - (refundMap[date] || 0),
       }));
 
       res.json({ success: true, data });
@@ -107,7 +177,7 @@ export const dashboardController = {
     }
   },
 
-  // ---------- 3. BEST PRODUCTS (top 10 sold) ----------
+  // ---------- 3. BEST PRODUCTS ----------
   async getBestProducts(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -138,6 +208,8 @@ export const dashboardController = {
         select: { id: true, name: true },
       });
 
+      // রিফান্ডেড আইটেমগুলোর প্রভাব বাদ দিতে চাইলে এখানে রিফান্ড কমানো যেতে পারে,
+      // কিন্তু বিক্রি সংখ্যা সাধারণত রিফান্ডে প্রভাবিত হয় না (পণ্য ফেরত না)।
       const data = soldItems.map((item) => {
         const product = products.find((p) => p.id === item.productId);
         return {
@@ -212,7 +284,6 @@ export const dashboardController = {
   },
 
   // ---------- 5. TOP CUSTOMERS ----------
-  // ---------- 5. TOP CUSTOMERS (১০ জন) ----------
   async getTopCustomers(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -230,7 +301,7 @@ export const dashboardController = {
         _count: { id: true },
         _sum: { total: true },
         orderBy: { _sum: { total: "desc" } },
-        take: 10, // ✅ ১০ এ নামিয়ে আনা হলো
+        take: 10,
       });
 
       const data = orders.map((order) => ({
@@ -382,7 +453,6 @@ export const dashboardController = {
         by: ["orderStatus"],
         where: {
           createdAt: { gte: start, lte: end },
-          orderStatus: { in: ["confirmed", "packed", "delivered"] },
         },
         _count: { id: true },
       });
@@ -399,7 +469,7 @@ export const dashboardController = {
     }
   },
 
-  // ---------- 10. TOP PROFIT PRODUCTS (NEW) ----------
+  // ---------- 10. TOP PROFIT PRODUCTS ----------
   async getTopProfitProducts(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -408,16 +478,15 @@ export const dashboardController = {
         endDate as string,
       );
 
-      // Raw SQL to compute profit = (unitPrice - buyingOrMakingPrice) * quantity
       const profitData = (await prisma.$queryRaw`
         SELECT 
           p.id as productId,
           p.name as productName,
           SUM((s.unitPrice - st.buyingOrMakingPrice) * s.quantity) as profit
-        FROM \`SoldItem\` s
+        FROM \`sold_items\` s
         JOIN \`stocks\` st ON st.id = s.stockId
-        JOIN \`Product\` p ON p.id = s.productId
-        JOIN \`Order\` o ON o.id = s.orderId
+        JOIN \`products\` p ON p.id = s.productId
+        JOIN \`orders\` o ON o.id = s.orderId
         WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
           AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
         GROUP BY p.id, p.name
@@ -436,8 +505,8 @@ export const dashboardController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-  // ---------- 11. PRICE COMPARISON (Stacked Area Chart) ----------
-  // ---------- 12. PRODUCT WISE SALES (Donut Chart) ----------
+
+  // ---------- 11. PRODUCT SALES ----------
   async getProductSales(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -456,7 +525,7 @@ export const dashboardController = {
           },
         },
         orderBy: { _sum: { totalPrice: "desc" } },
-        take: 10, // শীর্ষ ১০ পণ্য
+        take: 10,
       });
 
       const productIds = productSales
@@ -482,7 +551,8 @@ export const dashboardController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-  // ---------- 13. SALES VS PROFIT (Daily Line Chart) ----------
+
+  // ---------- 12. SALES VS PROFIT ----------
   async getSalesVsProfit(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -492,18 +562,18 @@ export const dashboardController = {
       );
 
       const salesProfitData = await prisma.$queryRaw`
-      SELECT 
-        DATE(o.createdAt) as date,
-        SUM(o.total) as revenue,
-        SUM((s.unitPrice - st.buyingOrMakingPrice) * s.quantity) as profit
-      FROM \`Order\` o
-      JOIN \`SoldItem\` s ON s.orderId = o.id
-      JOIN \`stocks\` st ON st.id = s.stockId
-      WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
-        AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
-      GROUP BY DATE(o.createdAt)
-      ORDER BY date ASC
-    `;
+        SELECT 
+          DATE(o.createdAt) as date,
+          SUM(o.total) as revenue,
+          SUM((s.unitPrice - st.buyingOrMakingPrice) * s.quantity) as profit
+        FROM \`orders\` o
+        JOIN \`sold_items\` s ON s.orderId = o.id
+        JOIN \`stocks\` st ON st.id = s.stockId
+        WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
+          AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
+        GROUP BY DATE(o.createdAt)
+        ORDER BY date ASC
+      `;
 
       res.json({ success: true, data: salesProfitData });
     } catch (error: any) {
@@ -511,8 +581,8 @@ export const dashboardController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
-  // ---------- 14. ORDER TRAFFIC HEATMAP (Day vs Time Slot) ----------
-  // ---------- 14. ORDER TRAFFIC HEATMAP (Day vs Time Slot) ----------
+
+  // ---------- 13. ORDER TRAFFIC ----------
   async getOrderTraffic(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -521,7 +591,6 @@ export const dashboardController = {
         endDate as string,
       );
 
-      // ইউনিফর্ম ৩-ঘন্টা স্লট, পূর্ণ ২৪ ঘন্টা
       const timeSlots = [
         { label: "12-3 AM", start: 0, end: 3 },
         { label: "3-6 AM", start: 3, end: 6 },
@@ -547,7 +616,6 @@ export const dashboardController = {
         },
       });
 
-      // ডেটা স্ট্রাকচার: [dayIndex][slotIndex] = { website, custom }
       const data: any = {};
       orders.forEach((order) => {
         const date = new Date(order.createdAt);
@@ -562,7 +630,6 @@ export const dashboardController = {
         if (!data[key]) {
           data[key] = { day, slot: slotIndex, website: 0, custom: 0 };
         }
-        // অর্ডারটি website হলে website-এ যোগ করব, না হলে custom-এ
         if (order.isWebsiteOrder) {
           data[key].website += order.total;
         } else {
@@ -570,7 +637,6 @@ export const dashboardController = {
         }
       });
 
-      // হিটম্যাপ ফরম্যাটে রূপান্তর: প্রতিটি ডেটা পয়েন্ট = { x: day, y: slotLabel, value: total }
       const websiteData: any[] = [];
       const customData: any[] = [];
 
@@ -592,6 +658,97 @@ export const dashboardController = {
       });
     } catch (error: any) {
       console.error("Order traffic error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  // dashboardController.ts - নতুন মেথড যোগ করুন
+
+  // ---------- TOP DEFECT INTENSIVE PRODUCTS ----------
+  // dashboardController.ts - getTopDefectProducts
+  async getTopDefectProducts(req: Request, res: Response) {
+    try {
+      const { startDate, endDate } = req.query;
+      const { start, end } = getDateRange(
+        startDate as string,
+        endDate as string,
+      );
+
+      console.log("📅 Date range:", { start, end });
+
+      // প্রথম কুয়েরি: সরাসরি soldItemId দিয়ে
+      const result = await prisma.$queryRaw`
+      SELECT 
+        p.id AS productId,
+        p.name AS productName,
+        COALESCE(SUM(si.quantity), 0) AS totalSoldQuantity,
+        COUNT(r.id) AS refundCount
+      FROM \`refunds\` r
+      LEFT JOIN \`sold_items\` si ON si.id = r.soldItemId
+      LEFT JOIN \`products\` p ON p.id = si.productId
+      WHERE r.reason = 'defect'
+        AND r.createdAt >= ${start} AND r.createdAt <= ${end}
+      GROUP BY p.id, p.name
+      HAVING p.id IS NOT NULL
+      ORDER BY refundCount DESC
+      LIMIT 10
+    `;
+
+      console.log("🔍 Query result:", result);
+
+      let finalData: any[] = [];
+
+      if ((result as any[]).length > 0) {
+        finalData = (result as any[]).map((p) => {
+          const refundCount = Number(p.refundCount) || 0;
+          const totalSold = Number(p.totalSoldQuantity) || 0;
+          const percentage =
+            totalSold > 0 ? (refundCount * 100) / totalSold : 0;
+          return {
+            productName: p.productName || "Unknown",
+            defectRefundCount: refundCount,
+            totalSoldQuantity: totalSold,
+            defectPercentage: Number(percentage.toFixed(2)),
+          };
+        });
+      } else {
+        // দ্বিতীয় কুয়েরি: orderId দিয়ে sold_items জয়েন (যখন soldItemId null)
+        console.log("⚠️ No results from first query, trying alternative...");
+        const altResult = await prisma.$queryRaw`
+        SELECT 
+          p.id AS productId,
+          p.name AS productName,
+          COALESCE(SUM(si.quantity), 0) AS totalSoldQuantity,
+          COUNT(r.id) AS refundCount
+        FROM \`refunds\` r
+        LEFT JOIN \`sold_items\` si ON si.orderId = r.orderId
+        LEFT JOIN \`products\` p ON p.id = si.productId
+        WHERE r.reason = 'defect'
+          AND r.createdAt >= ${start} AND r.createdAt <= ${end}
+        GROUP BY p.id, p.name
+        HAVING p.id IS NOT NULL
+        ORDER BY refundCount DESC
+        LIMIT 10
+      `;
+        console.log("🔍 Alternative query result:", altResult);
+
+        finalData = (altResult as any[]).map((p) => {
+          const refundCount = Number(p.refundCount) || 0;
+          const totalSold = Number(p.totalSoldQuantity) || 0;
+          const percentage =
+            totalSold > 0 ? (refundCount * 100) / totalSold : 0;
+          return {
+            productName: p.productName || "Unknown",
+            defectRefundCount: refundCount,
+            totalSoldQuantity: totalSold,
+            defectPercentage: Number(percentage.toFixed(2)),
+          };
+        });
+      }
+
+      res.json({ success: true, data: finalData });
+    } catch (error: any) {
+      console.error("Top defect products error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },

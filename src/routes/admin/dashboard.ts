@@ -21,5 +21,10 @@ router.get(
 router.get("/product-sales", adminAuth, dashboardController.getProductSales);
 router.get("/sales-vs-profit", adminAuth, dashboardController.getSalesVsProfit);
 router.get("/order-traffic", adminAuth, dashboardController.getOrderTraffic);
+router.get(
+  "/top-defect-products",
+  adminAuth,
+  dashboardController.getTopDefectProducts,
+);
 
 export default router;

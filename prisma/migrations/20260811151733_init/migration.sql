@@ -43,7 +43,7 @@ CREATE TABLE `barcodes` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `Product` (
+CREATE TABLE `products` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
     `slug` VARCHAR(191) NOT NULL,
@@ -59,7 +59,7 @@ CREATE TABLE `Product` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `Product_slug_key`(`slug`),
+    UNIQUE INDEX `products_slug_key`(`slug`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -113,7 +113,7 @@ CREATE TABLE `stock_movements` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `CustomerInfo` (
+CREATE TABLE `customer_infos` (
     `phone` VARCHAR(191) NOT NULL,
     `name` VARCHAR(191) NOT NULL,
     `address` VARCHAR(191) NOT NULL,
@@ -124,12 +124,12 @@ CREATE TABLE `CustomerInfo` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `CustomerInfo_phone_key`(`phone`),
+    UNIQUE INDEX `customer_infos_phone_key`(`phone`),
     PRIMARY KEY (`phone`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `Order` (
+CREATE TABLE `orders` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `invoiceNo` VARCHAR(191) NOT NULL,
     `subtotal` DOUBLE NOT NULL,
@@ -143,6 +143,9 @@ CREATE TABLE `Order` (
     `orderStatus` VARCHAR(191) NOT NULL DEFAULT 'new',
     `isWebsiteOrder` BOOLEAN NOT NULL DEFAULT false,
     `isSuspicious` BOOLEAN NOT NULL DEFAULT false,
+    `hasRefund` BOOLEAN NOT NULL DEFAULT false,
+    `refundStatus` VARCHAR(191) NOT NULL DEFAULT 'none',
+    `totalRefunded` DOUBLE NOT NULL DEFAULT 0,
     `paymentStatus` VARCHAR(191) NOT NULL DEFAULT 'pending',
     `deliveryStatus` VARCHAR(191) NULL DEFAULT 'Pending',
     `pathaoInvoiceId` VARCHAR(191) NULL,
@@ -152,13 +155,13 @@ CREATE TABLE `Order` (
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
-    UNIQUE INDEX `Order_invoiceNo_key`(`invoiceNo`),
-    UNIQUE INDEX `Order_pathaoConsignmentId_key`(`pathaoConsignmentId`),
+    UNIQUE INDEX `orders_invoiceNo_key`(`invoiceNo`),
+    UNIQUE INDEX `orders_pathaoConsignmentId_key`(`pathaoConsignmentId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `SoldItem` (
+CREATE TABLE `sold_items` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `orderId` INTEGER NOT NULL,
     `productName` VARCHAR(191) NOT NULL,
@@ -167,10 +170,28 @@ CREATE TABLE `SoldItem` (
     `unitPrice` DOUBLE NOT NULL,
     `totalPrice` DOUBLE NOT NULL,
     `quantity` INTEGER NOT NULL,
+    `refundedAmount` DOUBLE NOT NULL DEFAULT 0,
+    `isFullyRefunded` BOOLEAN NOT NULL DEFAULT false,
     `productId` INTEGER NULL,
     `variantId` INTEGER NULL,
     `stockId` INTEGER NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `refunds` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `orderId` INTEGER NOT NULL,
+    `soldItemId` INTEGER NULL,
+    `type` VARCHAR(191) NOT NULL,
+    `amount` DOUBLE NOT NULL,
+    `reason` VARCHAR(191) NOT NULL,
+    `imageUrl` TEXT NULL,
+    `transactionId` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `createdBy` INTEGER NULL,
 
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -281,10 +302,10 @@ CREATE TABLE `product_attributes` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE `Product` ADD CONSTRAINT `Product_categoryId_fkey` FOREIGN KEY (`categoryId`) REFERENCES `categories`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `products` ADD CONSTRAINT `products_categoryId_fkey` FOREIGN KEY (`categoryId`) REFERENCES `categories`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `variants` ADD CONSTRAINT `variants_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `Product`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `variants` ADD CONSTRAINT `variants_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `stocks` ADD CONSTRAINT `stocks_variantId_fkey` FOREIGN KEY (`variantId`) REFERENCES `variants`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -293,19 +314,25 @@ ALTER TABLE `stocks` ADD CONSTRAINT `stocks_variantId_fkey` FOREIGN KEY (`varian
 ALTER TABLE `stock_movements` ADD CONSTRAINT `stock_movements_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `Order` ADD CONSTRAINT `Order_orderedByPhone_fkey` FOREIGN KEY (`orderedByPhone`) REFERENCES `CustomerInfo`(`phone`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `orders` ADD CONSTRAINT `orders_orderedByPhone_fkey` FOREIGN KEY (`orderedByPhone`) REFERENCES `customer_infos`(`phone`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `SoldItem` ADD CONSTRAINT `SoldItem_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `Order`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `orders`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `SoldItem` ADD CONSTRAINT `SoldItem_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `sold_items` ADD CONSTRAINT `sold_items_stockId_fkey` FOREIGN KEY (`stockId`) REFERENCES `stocks`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `product_suppliers` ADD CONSTRAINT `product_suppliers_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `Product`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `refunds` ADD CONSTRAINT `refunds_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `orders`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `refunds` ADD CONSTRAINT `refunds_soldItemId_fkey` FOREIGN KEY (`soldItemId`) REFERENCES `sold_items`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `product_suppliers` ADD CONSTRAINT `product_suppliers_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `product_suppliers` ADD CONSTRAINT `product_suppliers_supplierId_fkey` FOREIGN KEY (`supplierId`) REFERENCES `suppliers`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `manufactures` ADD CONSTRAINT `manufactures_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `Product`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE `manufactures` ADD CONSTRAINT `manufactures_productId_fkey` FOREIGN KEY (`productId`) REFERENCES `products`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

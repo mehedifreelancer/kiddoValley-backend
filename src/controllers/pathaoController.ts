@@ -63,3 +63,48 @@ export const cancelPathaoOrder = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+export const getDeliveryPrice = async (req: Request, res: Response) => {
+  try {
+    const {
+      item_type,
+      delivery_type,
+      item_weight,
+      recipient_city,
+      recipient_zone,
+    } = req.body;
+
+    // ভ্যালিডেশন
+    if (
+      !item_type ||
+      !delivery_type ||
+      !item_weight ||
+      !recipient_city ||
+      !recipient_zone
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Missing required fields: item_type, delivery_type, item_weight, recipient_city, recipient_zone",
+      });
+    }
+
+    const result = await pathaoService.getDeliveryPrice({
+      item_type,
+      delivery_type,
+      item_weight,
+      recipient_city,
+      recipient_zone,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error: any) {
+    console.error("Price plan error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get delivery price",
+    });
+  }
+};

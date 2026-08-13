@@ -1119,4 +1119,241 @@ export const orderController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+  async refund(req: Request, res: Response) {
+    try {
+      const orderId = parseInt(req.params.id);
+      if (isNaN(orderId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid order ID" });
+      }
+
+      const { type, reason, imageUrl, transactionId, items } = req.body;
+
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { soldItems: true },
+      });
+
+      if (!order) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Order not found" });
+      }
+
+      if (order.orderStatus === "cancelled") {
+        return res.status(400).json({
+          success: false,
+          message: "Cancelled orders cannot be refunded",
+        });
+      }
+
+      if (type !== "partial" && type !== "full") {
+        return res.status(400).json({
+          success: false,
+          message: "Refund type must be 'partial' or 'full'",
+        });
+      }
+
+      const adminId = (req as any).admin?.id;
+
+      // ---------- FULL REFUND ----------
+      if (type === "full") {
+        const remaining = order.total - order.totalRefunded;
+        if (remaining <= 0) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Order already fully refunded" });
+        }
+
+        if (!reason) {
+          return res
+            .status(400)
+            .json({ success: false, message: "Reason is required" });
+        }
+
+        const result = await prisma.$transaction(async (tx) => {
+          const createdRefunds: any[] = [];
+
+          // প্রতিটা sold item-এর জন্য আলাদা Refund row (soldItemId সহ)
+          // যাতে report-এ direct attribution করা যায়, orderLevelTotal-এ পড়ে না যায়
+          for (const item of order.soldItems) {
+            const remainingItemAmount =
+              item.totalPrice - (item.refundedAmount || 0);
+
+            if (remainingItemAmount <= 0) {
+              // এই item আগেই পুরোপুরি রিফান্ড হয়ে গেছে, স্কিপ
+              continue;
+            }
+
+            const refund = await tx.refund.create({
+              data: {
+                orderId,
+                soldItemId: item.id,
+                type: "full",
+                amount: remainingItemAmount,
+                reason,
+                imageUrl: imageUrl || null,
+                transactionId: transactionId || null,
+                createdBy: adminId,
+              },
+            });
+            createdRefunds.push(refund);
+
+            await tx.soldItem.update({
+              where: { id: item.id },
+              data: {
+                refundedAmount: item.totalPrice,
+                isFullyRefunded: true,
+              },
+            });
+          }
+
+          // Order আপডেট
+          const updatedOrder = await tx.order.update({
+            where: { id: orderId },
+            data: {
+              hasRefund: true,
+              refundStatus: "full",
+              totalRefunded: order.total,
+            },
+          });
+
+          return { refunds: createdRefunds, order: updatedOrder };
+        });
+
+        return res.json({
+          success: true,
+          data: result,
+          message: "Full refund processed",
+        });
+      }
+
+      // ---------- PARTIAL REFUND ----------
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Items required for partial refund",
+        });
+      }
+
+      if (!reason) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Reason is required" });
+      }
+
+      let totalRefundAmount = 0;
+      const refundItems: any[] = [];
+
+      // Validate items
+      for (const item of items) {
+        const soldItem = order.soldItems.find(
+          (si) => si.id === item.soldItemId,
+        );
+        if (!soldItem) {
+          return res.status(400).json({
+            success: false,
+            message: `SoldItem ${item.soldItemId} not found in order`,
+          });
+        }
+
+        const remainingQty = soldItem.quantity;
+        const remainingAmount =
+          soldItem.totalPrice - (soldItem.refundedAmount || 0);
+
+        if (item.quantity <= 0 || item.amount <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Quantity and amount must be positive",
+          });
+        }
+        if (item.quantity > remainingQty || item.amount > remainingAmount) {
+          return res.status(400).json({
+            success: false,
+            message: `Refund exceeds remaining for item ${soldItem.productName}`,
+          });
+        }
+
+        totalRefundAmount += item.amount;
+        refundItems.push({
+          soldItemId: soldItem.id,
+          quantity: item.quantity,
+          amount: item.amount,
+        });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const createdRefunds: any[] = [];
+
+        // প্রতিটা item-এর জন্য আলাদা Refund row তৈরি (soldItemId সহ)
+        for (const item of refundItems) {
+          const soldItem = order.soldItems.find(
+            (si) => si.id === item.soldItemId,
+          )!;
+
+          const refund = await tx.refund.create({
+            data: {
+              orderId,
+              soldItemId: item.soldItemId,
+              type: "partial",
+              amount: item.amount,
+              reason,
+              imageUrl: imageUrl || null,
+              transactionId: transactionId || null,
+              createdBy: adminId,
+            },
+          });
+          createdRefunds.push(refund);
+
+          const newRefundedAmount =
+            (soldItem.refundedAmount || 0) + item.amount;
+          const isFullyRefunded = newRefundedAmount >= soldItem.totalPrice;
+
+          await tx.soldItem.update({
+            where: { id: soldItem.id },
+            data: {
+              refundedAmount: newRefundedAmount,
+              isFullyRefunded,
+            },
+          });
+        }
+
+        // Order আপডেট
+        const updatedOrder = await tx.order.update({
+          where: { id: orderId },
+          data: {
+            hasRefund: true,
+            refundStatus: "partial",
+            totalRefunded: { increment: totalRefundAmount },
+          },
+        });
+
+        // সব item fully refunded হলে order-কে "full" এ upgrade করা
+        const allSoldItems = await tx.soldItem.findMany({
+          where: { orderId },
+        });
+        const allFullyRefunded = allSoldItems.every((si) => si.isFullyRefunded);
+
+        let finalOrder = updatedOrder;
+        if (allFullyRefunded) {
+          finalOrder = await tx.order.update({
+            where: { id: orderId },
+            data: { refundStatus: "full" },
+          });
+        }
+
+        return { refunds: createdRefunds, order: finalOrder };
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: "Partial refund processed",
+      });
+    } catch (error: any) {
+      console.error("Refund error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 };

@@ -18,7 +18,6 @@ router.put("/:id/confirm", orderController.confirmOrder);
 // ✅ অর্ডার আপডেট (শুধু new স্ট্যাটাসে)
 router.put("/:id", orderController.updateOrder);
 
-
 // ✅ অর্ডার বাতিল
 router.delete("/:id", orderController.cancelOrder);
 
@@ -27,6 +26,7 @@ router.delete("/:id/delete", orderController.deleteOrder);
 
 // ✅ অর্ডার ডিটেইলস
 router.get("/:id", orderController.getOrderDetails);
+router.post("/:id/refund", orderController.refund);
 
 // ✅ টেস্ট রাউট (ঐচ্ছিক)
 router.get("/test", (req, res) => {

@@ -182,6 +182,36 @@ class PathaoService {
     }>("DELETE", `/aladdin/api/v1/orders/${consignmentId}`);
     return { success: true, message: result.message || "Order cancelled" };
   }
+  async getDeliveryPrice(params: {
+    item_type: number;
+    delivery_type: number;
+    item_weight: number;
+    recipient_city: number;
+    recipient_zone: number;
+  }) {
+    const storeId = await this.getStoreId(); // or use this.storeId
+    const payload = {
+      store_id: storeId,
+      item_type: params.item_type,
+      delivery_type: params.delivery_type,
+      item_weight: params.item_weight,
+      recipient_city: params.recipient_city,
+      recipient_zone: params.recipient_zone,
+    };
+    const result = await this.request<{
+      data: {
+        price: number;
+        discount: number;
+        promo_discount: number;
+        plan_id: number;
+        cod_enabled: number;
+        cod_percentage: number;
+        additional_charge: number;
+        final_price: number;
+      };
+    }>("POST", "/aladdin/api/v1/merchant/price-plan", payload);
+    return result.data;
+  }
 }
 
 export default new PathaoService();

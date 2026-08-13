@@ -31,6 +31,7 @@ import publicStockRoutes from "./routes/public/stock";
 import publicOrderTrackingRoutes from "./routes/public/orderTracking";
 import adminOrderTrackingRoutes from "./routes/admin/orderTracking";
 import adminReportRoutes from "./routes/admin/dashboard";
+import reportRoutes from "./routes/admin/report";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -125,6 +126,7 @@ app.use("/api/public/hero-sliders", publicHeroSliderRoutes);
 app.use("/api/public/order-tracking", publicOrderTrackingRoutes);
 app.use("/api/admin/order-tracking", adminOrderTrackingRoutes);
 app.use("/api/admin/dashboard", adminAuth, adminReportRoutes);
+app.use("/api/admin/report", adminAuth, reportRoutes);
 
 // Health check
 app.get("/", (req: Request, res: Response) => {

@@ -551,7 +551,7 @@ export const stockController = {
         include: {
           variant: {
             include: {
-              product: { select: { name: true } },
+              product: { select: { name: true, weight: true } },
             },
           },
         },
@@ -565,6 +565,7 @@ export const stockController = {
         discountPercent: stock.discountPercent,
         currentQty: stock.currentQty,
         createdAt: stock.createdAt,
+        weight: stock.variant.product.weight || 0, // 👈 top-level এ যোগ হলো, frontend `stock.weight` হিসেবে পাবে
         variant: {
           id: stock.variant.id,
           sku: stock.variant.sku,

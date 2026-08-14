@@ -32,6 +32,7 @@ import publicOrderTrackingRoutes from "./routes/public/orderTracking";
 import adminOrderTrackingRoutes from "./routes/admin/orderTracking";
 import adminReportRoutes from "./routes/admin/dashboard";
 import reportRoutes from "./routes/admin/report";
+import deliveryRoutes from "./routes/admin/delivery";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -127,6 +128,7 @@ app.use("/api/public/order-tracking", publicOrderTrackingRoutes);
 app.use("/api/admin/order-tracking", adminOrderTrackingRoutes);
 app.use("/api/admin/dashboard", adminAuth, adminReportRoutes);
 app.use("/api/admin/report", adminAuth, reportRoutes);
+app.use("/api/admin/delivery", adminAuth, deliveryRoutes);
 
 // Health check
 app.get("/", (req: Request, res: Response) => {

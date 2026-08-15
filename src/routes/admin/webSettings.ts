@@ -51,5 +51,16 @@ router.post(
   uploadLogo.single("logo"),
   webSettingsController.updateSettings,
 );
+router.get(
+  "/packaging-cost",
+  adminAuth,
+  webSettingsController.getPackagingSettings,
+);
+
+router.post(
+  "/packaging-cost",
+  adminAuth,
+  webSettingsController.updatePackagingSettings,
+);
 
 export default router;

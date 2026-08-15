@@ -2,9 +2,6 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 
 export const reportController = {
-  // ============================================================
-  // SELLS REPORT – Direct + Proportional refund distribution
-  // ============================================================
   async getSellsReport(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -21,7 +18,7 @@ export const reportController = {
         start.setHours(0, 0, 0, 0);
       }
 
-      // অর্ডার + সোল্ড আইটেম + স্টক + রিফান্ড (অর্ডার লেভেল)
+      // অর্ডার + সোল্ড আইটেম + স্টক + রিফান্ড
       const orders = await prisma.order.findMany({
         where: {
           createdAt: { gte: start, lte: end },
@@ -33,14 +30,14 @@ export const reportController = {
               stock: true,
             },
           },
-          refunds: true, // অর্ডারের সব রিফান্ড
+          refunds: true,
         },
         orderBy: { createdAt: "asc" },
       });
 
       const reportData = orders.map((order) => {
-        // ---- ১. রিফান্ড আলাদা করা ----
-        const directRefundsByItem = new Map<number, number>(); // soldItemId -> total amount
+        // ---- ১. রিফান্ড বণ্টন ----
+        const directRefundsByItem = new Map<number, number>();
         let orderLevelTotal = 0;
 
         order.refunds.forEach((r) => {
@@ -52,15 +49,21 @@ export const reportController = {
           }
         });
 
-        // অর্ডারের মোট বিক্রয় (আইটেমের totalPrice যোগ)
         const orderTotal = order.soldItems.reduce(
           (sum, item) => sum + item.totalPrice,
           0,
         );
 
-        // ডেলিভারি চার্জ (যদি থাকে, নাহলে ০)
-        const orderDeliveryCharge = 0; // (order as any).deliveryCharge || 0;
+        // ✅ অর্ডার লেভেল ডেলিভারি চার্জ ও প্যাকেজিং কস্ট (ডাটাবেস থেকে)
+        const deliveryCharge = (order as any).deliveryCharge || 0;
+        const packagingCost = (order as any).packagingCost || 0;
 
+        // ✅ অর্ডারের নিজস্ব "total" কলাম (ডাটাবেস থেকে সরাসরি) — এটাই আসল
+        // Total Bill, checkout-এর সময় যা সেভ হয়েছিল। items থেকে আলাদাভাবে
+        // হিসাব করে বের করার দরকার নেই, কারণ ডাটাবেসেই এটা রাখা আছে।
+        const orderTotal_dbTotal = (order as any).total || 0;
+
+        // ---- ২. প্রতিটি আইটেমের জন্য ডেটা তৈরি ----
         const items = order.soldItems.map((item) => {
           const buyPrice = item.stock?.buyingOrMakingPrice || 0;
           const sellingPrice = item.stock?.sellingPrice || 0;
@@ -68,25 +71,30 @@ export const reportController = {
           const weight = item.quantity;
           const grossProfit = (soldPrice - buyPrice) * weight;
 
-          // ---- ২. আইটেমের জন্য রিফান্ড অ্যামাউন্ট ----
-          // Direct refund for this item
+          // Direct refund
           const directAmount = directRefundsByItem.get(item.id) || 0;
 
-          // Proportional share of order-level refunds
+          // Proportional refund
           let proportionalAmount = 0;
           if (orderTotal > 0 && orderLevelTotal > 0) {
             proportionalAmount =
               (item.totalPrice / orderTotal) * orderLevelTotal;
           }
-
           const returnAmount = directAmount + proportionalAmount;
 
-          // প্যাকেজিং কস্ট (যদি থাকে)
-          const packagingCost = 0;
+          // ✅ ডেলিভারি ও প্যাকেজিং বণ্টন (আইটেমের টোটাল প্রাইস অনুপাতে)
+          let itemDeliveryCharge = 0;
+          let itemPackagingCost = 0;
+          if (orderTotal > 0) {
+            const ratio = item.totalPrice / orderTotal;
+            itemDeliveryCharge = deliveryCharge * ratio;
+            itemPackagingCost = packagingCost * ratio;
+          }
 
-          // নেট প্রফিট = গ্রস – (ডেলিভারি + প্যাকেজিং + রিফান্ড)
+          // ✅ নেট প্রফিট = গ্রস – (ডেলিভারি + প্যাকেজিং + রিফান্ড)
           const netProfit =
-            grossProfit - (orderDeliveryCharge + packagingCost + returnAmount);
+            grossProfit -
+            (itemDeliveryCharge + itemPackagingCost + returnAmount);
 
           return {
             id: item.id,
@@ -94,9 +102,10 @@ export const reportController = {
             buyPrice: buyPrice,
             sellingPrice: sellingPrice,
             soldPrice: soldPrice,
-            weight: weight,
+            weight: weight, // ⚠️ নামে "weight" হলেও এটা আসলে item.quantity — কয়টি নেওয়া হয়েছে
             grossProfit: grossProfit,
-            deliveryCharge: orderDeliveryCharge,
+            deliveryCharge: itemDeliveryCharge,
+            packagingCost: itemPackagingCost, // 🆕 নতুন ফিল্ড
             returnAmount: returnAmount,
             netProfit: netProfit,
           };
@@ -105,6 +114,13 @@ export const reportController = {
         return {
           invoiceNo: order.invoiceNo,
           items: items,
+          // অর্ডার টোটালেও রাখতে পারি (UI-তে ব্যবহারের জন্য)
+          orderTotals: {
+            deliveryCharge,
+            packagingCost,
+            refundTotal: order.refunds.reduce((sum, r) => sum + r.amount, 0),
+            total: orderTotal_dbTotal, // 🆕 Invoice-এর পাশে "Total Bill" দেখানোর জন্য
+          },
         };
       });
 

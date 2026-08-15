@@ -7,6 +7,11 @@ import {
   updateDeliverySettings,
   validateDeliverySettingsPayload,
 } from "../services/deliverySettings.service";
+import {
+  getPackagingSettings,
+  updatePackagingSettings,
+  validatePackagingSettingsPayload,
+} from "../services/packagingSettings.service";
 
 const SETTINGS_KEY = "web_settings";
 
@@ -275,6 +280,40 @@ export const webSettingsController = {
       res.status(500).json({
         success: false,
         message: "Failed to update delivery settings",
+      });
+    }
+  },
+
+  // কন্ট্রোলার অবজেক্টের ভেতর (যেখানে delivery settings আছে, তার পাশে):
+  async getPackagingSettings(req: Request, res: Response) {
+    try {
+      const data = await getPackagingSettings();
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Get packaging settings error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch packaging settings",
+      });
+    }
+  },
+
+  async updatePackagingSettings(req: Request, res: Response) {
+    try {
+      const settings = req.body;
+      const validationError = validatePackagingSettingsPayload(settings);
+      if (validationError) {
+        return res
+          .status(400)
+          .json({ success: false, message: validationError });
+      }
+      const data = await updatePackagingSettings(settings);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Update packaging settings error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: "Failed to update packaging settings",
       });
     }
   },

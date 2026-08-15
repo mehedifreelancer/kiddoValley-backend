@@ -153,6 +153,8 @@ model Order {
   orderStatus    String  @default("new") // new, confirmed, cancelled
   isWebsiteOrder Boolean @default(false)
   isSuspicious   Boolean @default(false)
+  deliveryCharge Float   @default(0) // 🆕 ফ্রন্টএন্ড থেকে আসা ডেলিভারি চার্জ
+  packagingCost  Float   @default(0) // 🆕 ডাটাবেস থেকে পড়া প্যাকেজিং কস্ট (শুধু রেকর্ড
 
   hasRefund     Boolean @default(false)
   refundStatus  String  @default("none") // "none" | "partial" | "full"
@@ -340,4 +342,14 @@ model DeliverySettings {
   updatedAt DateTime @updatedAt
 
   @@map("delivery_settings")
+}
+
+model PackagingSettings {
+  id                   Int   @id @default(1)
+  averagePackagingCost Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("packaging_settings")
 }

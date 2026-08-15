@@ -180,7 +180,19 @@ export const orderController = {
         subtotal,
         discountTotal,
         total,
+        deliveryCharge,
       } = req.body;
+
+      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন (শুধু রেকর্ডের জন্য, টোটালে যোগ হবে না)
+      let packagingCost = 0;
+      try {
+        const packagingSettings = await prisma.packagingSettings.findUnique({
+          where: { id: 1 },
+        });
+        packagingCost = packagingSettings?.averagePackagingCost || 0;
+      } catch (err) {
+        // fail-open: 0
+      }
 
       if (!customerName || !customerPhone || !customerAddress) {
         return res.status(400).json({
@@ -195,7 +207,6 @@ export const orderController = {
         });
       }
 
-      // 🔥 কাস্টমার তৈরি – ব্যর্থ হলে log + null (অর্ডার বাধাগ্রস্ত হবে না)
       let customer = null;
       try {
         customer = await getOrCreateCustomer(
@@ -208,12 +219,10 @@ export const orderController = {
           preferredToy,
         );
       } catch (err) {
-        console.error("❌ Customer creation failed:", err);
-        // customer null থাকবে
+        console.error("Customer creation failed:", err);
       }
 
       const order = await prisma.$transaction(async (tx) => {
-        // Stock check and reduce
         const stockUpdates = await Promise.all(
           items.map(async (item: OrderItemInput) => {
             const stock = await tx.stock.findUnique({
@@ -234,18 +243,19 @@ export const orderController = {
           }),
         );
 
-        // Create order
         const newOrder = await tx.order.create({
           data: {
             invoiceNo: generateInvoiceNo(),
             subtotal,
             discount: discountTotal,
             total,
+            deliveryCharge: deliveryCharge || 0,
+            packagingCost: packagingCost,
             customerName,
             customerPhone,
             customerPhone2,
             customerAddress,
-            orderedByPhone: customer?.phone || null, // ✅ fallback null
+            orderedByPhone: customer?.phone || null,
             deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
             paymentStatus: "paid",
             orderStatus: "new",
@@ -254,7 +264,6 @@ export const orderController = {
           },
         });
 
-        // SoldItem (with snapshot)
         for (const { stock, item } of stockUpdates) {
           const variant = stock.variant;
           await tx.soldItem.create({
@@ -273,7 +282,6 @@ export const orderController = {
           });
         }
 
-        // StockMovement log
         for (const { stock, item } of stockUpdates) {
           await tx.stockMovement.create({
             data: {
@@ -427,7 +435,19 @@ export const orderController = {
         subtotal,
         discountTotal,
         total,
+        deliveryCharge,
       } = req.body;
+
+      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন
+      let packagingCost = 0;
+      try {
+        const packagingSettings = await prisma.packagingSettings.findUnique({
+          where: { id: 1 },
+        });
+        packagingCost = packagingSettings?.averagePackagingCost || 0;
+      } catch (err) {
+        // fail-open
+      }
 
       if (!customerName || !customerPhone || !customerAddress) {
         return res.status(400).json({
@@ -442,7 +462,6 @@ export const orderController = {
         });
       }
 
-      // 🔥 কাস্টমার তৈরি – ব্যর্থ হলে log + null
       let customer = null;
       try {
         customer = await getOrCreateCustomer(
@@ -483,6 +502,8 @@ export const orderController = {
             subtotal,
             discount: discountTotal,
             total,
+            deliveryCharge: deliveryCharge || 0,
+            packagingCost: packagingCost,
             customerName,
             customerPhone,
             customerPhone2,
@@ -807,7 +828,19 @@ export const orderController = {
         subtotal,
         discountTotal,
         total,
+        deliveryCharge,
       } = req.body;
+
+      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন
+      let packagingCost = 0;
+      try {
+        const packagingSettings = await prisma.packagingSettings.findUnique({
+          where: { id: 1 },
+        });
+        packagingCost = packagingSettings?.averagePackagingCost || 0;
+      } catch (err) {
+        // fail-open
+      }
 
       if (!customerName || !customerPhone || !customerAddress) {
         return res.status(400).json({
@@ -864,6 +897,8 @@ export const orderController = {
             subtotal,
             discount: discountTotal,
             total,
+            deliveryCharge: deliveryCharge || 0,
+            packagingCost: packagingCost,
             customerName,
             customerPhone,
             customerPhone2,
@@ -984,6 +1019,7 @@ export const orderController = {
         subtotal,
         discountTotal,
         total,
+        deliveryCharge,
       } = req.body;
 
       const existingOrder = await prisma.order.findUnique({
@@ -1086,23 +1122,30 @@ export const orderController = {
           });
         }
 
+        // Build update data
+        const updateData: any = {
+          customerName: customerName || existingOrder.customerName,
+          customerPhone: customerPhone || existingOrder.customerPhone,
+          customerPhone2:
+            customerPhone2 !== undefined
+              ? customerPhone2
+              : existingOrder.customerPhone2,
+          customerAddress: customerAddress || existingOrder.customerAddress,
+          deliveryDate: deliveryDate
+            ? new Date(deliveryDate)
+            : existingOrder.deliveryDate,
+          subtotal: subtotal || existingOrder.subtotal,
+          discount: discountTotal || existingOrder.discount,
+          total: total || existingOrder.total,
+        };
+        // ডেলিভারি চার্জ আপডেট করতে চাইলে (ঐচ্ছিক)
+        if (deliveryCharge !== undefined) {
+          updateData.deliveryCharge = deliveryCharge;
+        }
+
         const updatedOrder = await tx.order.update({
           where: { id: orderId },
-          data: {
-            customerName: customerName || existingOrder.customerName,
-            customerPhone: customerPhone || existingOrder.customerPhone,
-            customerPhone2:
-              customerPhone2 !== undefined
-                ? customerPhone2
-                : existingOrder.customerPhone2,
-            customerAddress: customerAddress || existingOrder.customerAddress,
-            deliveryDate: deliveryDate
-              ? new Date(deliveryDate)
-              : existingOrder.deliveryDate,
-            subtotal: subtotal || existingOrder.subtotal,
-            discount: discountTotal || existingOrder.discount,
-            total: total || existingOrder.total,
-          },
+          data: updateData,
           include: { soldItems: true },
         });
 
@@ -1119,6 +1162,8 @@ export const orderController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+
+  // -------------------- 11. REFUND ORDER --------------------
   async refund(req: Request, res: Response) {
     try {
       const orderId = parseInt(req.params.id);
@@ -1175,14 +1220,11 @@ export const orderController = {
         const result = await prisma.$transaction(async (tx) => {
           const createdRefunds: any[] = [];
 
-          // প্রতিটা sold item-এর জন্য আলাদা Refund row (soldItemId সহ)
-          // যাতে report-এ direct attribution করা যায়, orderLevelTotal-এ পড়ে না যায়
           for (const item of order.soldItems) {
             const remainingItemAmount =
               item.totalPrice - (item.refundedAmount || 0);
 
             if (remainingItemAmount <= 0) {
-              // এই item আগেই পুরোপুরি রিফান্ড হয়ে গেছে, স্কিপ
               continue;
             }
 
@@ -1209,7 +1251,6 @@ export const orderController = {
             });
           }
 
-          // Order আপডেট
           const updatedOrder = await tx.order.update({
             where: { id: orderId },
             data: {
@@ -1286,7 +1327,6 @@ export const orderController = {
       const result = await prisma.$transaction(async (tx) => {
         const createdRefunds: any[] = [];
 
-        // প্রতিটা item-এর জন্য আলাদা Refund row তৈরি (soldItemId সহ)
         for (const item of refundItems) {
           const soldItem = order.soldItems.find(
             (si) => si.id === item.soldItemId,
@@ -1319,7 +1359,6 @@ export const orderController = {
           });
         }
 
-        // Order আপডেট
         const updatedOrder = await tx.order.update({
           where: { id: orderId },
           data: {
@@ -1329,7 +1368,6 @@ export const orderController = {
           },
         });
 
-        // সব item fully refunded হলে order-কে "full" এ upgrade করা
         const allSoldItems = await tx.soldItem.findMany({
           where: { orderId },
         });

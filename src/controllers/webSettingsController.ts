@@ -2,6 +2,11 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import path from "path";
 import fs from "fs";
+import {
+  getDeliverySettings,
+  updateDeliverySettings,
+  validateDeliverySettingsPayload,
+} from "../services/deliverySettings.service";
 
 const SETTINGS_KEY = "web_settings";
 
@@ -237,6 +242,40 @@ export const webSettingsController = {
       res
         .status(500)
         .json({ success: false, message: "Failed to fetch settings" });
+    }
+  },
+  // ----- Delivery Settings -----
+  async getDeliverySettings(req: Request, res: Response) {
+    try {
+      const data = await getDeliverySettings();
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Get delivery settings error:", error.message);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to fetch delivery settings" });
+    }
+  },
+
+  async updateDeliverySettings(req: Request, res: Response) {
+    try {
+      const settings = req.body;
+
+      const validationError = validateDeliverySettingsPayload(settings);
+      if (validationError) {
+        return res
+          .status(400)
+          .json({ success: false, message: validationError });
+      }
+
+      const data = await updateDeliverySettings(settings);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error("Update delivery settings error:", error.message);
+      res.status(500).json({
+        success: false,
+        message: "Failed to update delivery settings",
+      });
     }
   },
 };

@@ -323,3 +323,21 @@ model ProductAttribute {
 
   @@map("product_attributes")
 }
+
+model DeliverySettings {
+  id Int @id @default(1)
+
+  weightTiers Json
+
+  overweightInsideDhaka  Float @default(15)
+  overweightOutsideDhaka Float @default(25)
+  overweightSuburbs      Float @default(20) // 🆕
+
+  codPercentage           Float @default(1)
+  deliveryDiscountPercent Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("delivery_settings")
+}

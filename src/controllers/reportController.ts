@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
+import { calculateSalesFinancials } from "../utils/financials";
 
 export const reportController = {
   async getSellsReport(req: Request, res: Response) {
@@ -130,6 +131,113 @@ export const reportController = {
       });
     } catch (error: any) {
       console.error("Sells Report error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  // ----- Annual Report -----
+  // ✅ এখন calculateSalesFinancials() ব্যবহার করে, তাই Sells Report,
+  // Balance Summary আর এই Annual Report — তিনটাই একই source থেকে
+  // profit হিসাব করছে, কোনো mismatch থাকবে না।
+  async getAnnualReport(req: Request, res: Response) {
+    try {
+      const year =
+        parseInt(req.query.year as string) || new Date().getFullYear();
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+
+      // Transactions সবসময় non-sales, কারণ sales কখনো transaction row হিসেবে
+      // তৈরিই হয় না — তাই এখানে কোনো category exclude করার দরকার নেই।
+      const transactions = await prisma.transaction.findMany({
+        where: {
+          date: { gte: startDate, lte: endDate },
+        },
+        include: { category: true },
+      });
+
+      const months = [];
+      for (let i = 0; i < 12; i++) {
+        const monthStart = new Date(year, i, 1);
+        const monthEnd = new Date(year, i + 1, 0, 23, 59, 59, 999);
+
+        // ✅ Sells Report-এর মতো একই function দিয়ে এই মাসের sales হিসাব
+        const { totalSalesAmount, totalRefunds, salesCashIn, salesNetProfit } =
+          await calculateSalesFinancials(monthStart, monthEnd);
+
+        const monthTransactions = transactions.filter(
+          (t) => new Date(t.date).getMonth() === i,
+        );
+
+        const incomeTransactions = monthTransactions.filter(
+          (t) => t.category.type === "in",
+        );
+        const expenseTransactions = monthTransactions.filter(
+          (t) => t.category.type === "out",
+        );
+        // loan/withdraw কে true operating expense ধরা হচ্ছে না
+        const filteredExpenses = expenseTransactions.filter(
+          (t) => !["take_loan", "withdraw"].includes(t.category.name),
+        );
+
+        const otherIncome = incomeTransactions.reduce(
+          (sum, t) => sum + t.amount,
+          0,
+        );
+        const expenses = filteredExpenses.reduce((sum, t) => sum + t.amount, 0);
+
+        // 🟢 "মাসিক লাভ" = real profit (delivery/packaging/refund বাদ দেওয়ার পর)
+        const monthlyNet = salesNetProfit + otherIncome - expenses;
+
+        // 🔵 "চলতি ক্যাশ"-এর জন্য এই মাসের cash movement — profit থেকে আলাদা,
+        // কারণ customer পুরো order total-ই cash হিসেবে দিয়েছে (delivery charge সহ)
+        const monthlyCashChange = salesCashIn + otherIncome - expenses;
+
+        months.push({
+          month: i + 1,
+          monthName: new Date(year, i).toLocaleString("default", {
+            month: "long",
+          }),
+          totalSales: totalSalesAmount,
+          totalRefunds,
+          salesNetProfit,
+          otherIncome,
+          expenses,
+          monthlyNet,
+          monthlyCashChange,
+        });
+      }
+
+      // Running cash — এখন real cash movement দিয়ে হিসাব হচ্ছে,
+      // profit দিয়ে না। এই total-টাই accountController-এর
+      // calculateCashBalance()-এর সাথে মিলবে।
+      let running = 0;
+      const result = months.map((m) => {
+        running += m.monthlyCashChange;
+        // internal field, response-এ পাঠানোর দরকার নেই
+        const { monthlyCashChange, ...rest } = m;
+        return { ...rest, runningCash: running };
+      });
+
+      const totals = {
+        totalSales: result.reduce((s, m) => s + m.totalSales, 0),
+        totalRefunds: result.reduce((s, m) => s + m.totalRefunds, 0),
+        totalSalesNetProfit: result.reduce((s, m) => s + m.salesNetProfit, 0),
+        totalOtherIncome: result.reduce((s, m) => s + m.otherIncome, 0),
+        totalExpenses: result.reduce((s, m) => s + m.expenses, 0),
+        totalMonthlyNet: result.reduce((s, m) => s + m.monthlyNet, 0),
+        finalCash: result[result.length - 1]?.runningCash || 0,
+      };
+
+      res.json({
+        success: true,
+        data: {
+          year,
+          months: result,
+          totals,
+        },
+      });
+    } catch (error: any) {
+      console.error("Annual report error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },

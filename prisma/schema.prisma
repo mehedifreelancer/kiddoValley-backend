@@ -353,3 +353,66 @@ model PackagingSettings {
 
   @@map("packaging_settings")
 }
+
+model TransactionCategory {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  type        String // 'in' বা 'out'
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  transactions Transaction[]
+
+  @@map("transaction_categories")
+}
+
+model Transaction {
+  id         Int                 @id @default(autoincrement())
+  date       DateTime            @default(now())
+  categoryId Int
+  category   TransactionCategory @relation(fields: [categoryId], references: [id])
+  amount     Float
+  note       String?
+  createdBy  Int?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@map("transactions")
+}
+
+model Asset {
+  id           Int      @id @default(autoincrement())
+  name         String
+  value        Float
+  purchaseDate DateTime @default(now())
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("assets")
+}
+
+model EmployeeBill {
+  id          Int      @id @default(autoincrement())
+  name        String
+  amount      Float
+  date        DateTime @default(now())
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("employee_bills")
+}
+
+model RawMaterial {
+  id          Int      @id @default(autoincrement())
+  name        String
+  amount      Float
+  date        DateTime @default(now())
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("raw_materials")
+}

@@ -14,7 +14,7 @@ interface OrderItemInput {
   totalPrice: number;
 }
 
-// ✅ পাথাও সক্রিয় কিনা চেক করুন
+// ✅ পাথাও সক্রিয় কিনা চেক করুন
 const isPathaoActive = process.env.PATHAO_ACTIVE === "true";
 
 // ----- Helper: get or create customer (now using upsert) -----
@@ -183,7 +183,7 @@ export const orderController = {
         deliveryCharge,
       } = req.body;
 
-      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন (শুধু রেকর্ডের জন্য, টোটালে যোগ হবে না)
+      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন (শুধু রেকর্ডের জন্য, টোটালে যোগ হবে না)
       let packagingCost = 0;
       try {
         const packagingSettings = await prisma.packagingSettings.findUnique({
@@ -438,7 +438,7 @@ export const orderController = {
         deliveryCharge,
       } = req.body;
 
-      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন
+      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন
       let packagingCost = 0;
       try {
         const packagingSettings = await prisma.packagingSettings.findUnique({
@@ -831,7 +831,7 @@ export const orderController = {
         deliveryCharge,
       } = req.body;
 
-      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন
+      // প্যাকেজিং কস্ট ডাটাবেস থেকে পড়ুন
       let packagingCost = 0;
       try {
         const packagingSettings = await prisma.packagingSettings.findUnique({

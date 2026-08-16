@@ -47,6 +47,23 @@ const toLocalDateKey = (d: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+// ---- 15-min slot helpers ----
+// Din-ke 96 ta slot-e ভাগ kora hocche (24 ghonta * 4). Slot index 0-95.
+// slot 0 = 00:00-00:14, slot 1 = 00:15-00:29, ... slot 95 = 23:45-23:59
+const SLOT_MINUTES = 15;
+const SLOTS_PER_DAY = (24 * 60) / SLOT_MINUTES; // 96
+
+const toSlotIndex = (d: Date) =>
+  d.getHours() * (60 / SLOT_MINUTES) +
+  Math.floor(d.getMinutes() / SLOT_MINUTES);
+
+const slotToTimeLabel = (slot: number) => {
+  const totalMinutes = slot * SLOT_MINUTES;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+};
+
 export const liveCampaignController = {
   // ---------- CRUD ----------
   async getCampaigns(req: Request, res: Response) {
@@ -56,9 +73,7 @@ export const liveCampaignController = {
       const search = (req.query.search as string) || "";
       const skip = (page - 1) * limit;
 
-      const where = search
-        ? { title: { contains: search, mode: "insensitive" } }
-        : {};
+      const where = search ? { title: { contains: search } } : {};
 
       const [data, total] = await Promise.all([
         prisma.campaign.findMany({
@@ -191,7 +206,7 @@ export const liveCampaignController = {
 
       let totalProfit = 0;
       const byDate: Record<string, number> = {};
-      const hourly: Record<number, number> = {};
+      const quarterHourly: Record<number, number> = {}; // key: slot index 0-95
 
       for (const o of orders) {
         const p = calcProfit(o);
@@ -202,8 +217,8 @@ export const liveCampaignController = {
         byDate[dateKey] = (byDate[dateKey] || 0) + p;
 
         if (o.createdAt >= today) {
-          const h = o.createdAt.getHours();
-          hourly[h] = (hourly[h] || 0) + p;
+          const slot = toSlotIndex(o.createdAt);
+          quarterHourly[slot] = (quarterHourly[slot] || 0) + p;
         }
       }
 
@@ -221,27 +236,32 @@ export const liveCampaignController = {
         cursor = addDays(cursor, 1);
       }
 
-      // ---------- Hourly series: FULL 0-23, aajker jonno ----------
+      // ---------- Quarter-hourly series: FULL 96 slots (0-95), aajker jonno ----------
       const campaignStartedToday =
         campaignStartDay.getTime() === today.getTime();
-      const startHour = campaignStartedToday
-        ? campaign.createdAt.getHours()
+      const startSlot = campaignStartedToday
+        ? toSlotIndex(campaign.createdAt)
         : 0;
 
       const dataBoundaryIsToday = dataBoundaryDay.getTime() === today.getTime();
-      const endHour = dataBoundaryIsToday ? dataBoundary.getHours() : -1;
+      const endSlot = dataBoundaryIsToday ? toSlotIndex(dataBoundary) : -1;
 
-      const hourlySeries: { hour: number; profit: number | null }[] = [];
-      for (let h = 0; h < 24; h++) {
-        const withinWindow = h >= startHour && h <= endHour;
+      const hourlySeries: {
+        slot: number;
+        time: string;
+        profit: number | null;
+      }[] = [];
+      for (let s = 0; s < SLOTS_PER_DAY; s++) {
+        const withinWindow = s >= startSlot && s <= endSlot;
         hourlySeries.push({
-          hour: h,
-          profit: withinWindow ? round2(hourly[h] || 0) : null,
+          slot: s,
+          time: slotToTimeLabel(s),
+          profit: withinWindow ? round2(quarterHourly[s] || 0) : null,
         });
       }
 
       const todayProfit = round2(
-        Object.entries(hourly).reduce((sum, [, v]) => sum + v, 0),
+        Object.entries(quarterHourly).reduce((sum, [, v]) => sum + v, 0),
       );
 
       res.json({

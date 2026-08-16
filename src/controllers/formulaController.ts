@@ -10,7 +10,7 @@ export const formulaController = {
       const skip = (page - 1) * limit;
 
       const where = search
-        ? { title: { contains: search, mode: "insensitive" } }
+        ? { title: { contains: search } } // ✅ removed `mode: "insensitive"`
         : {};
 
       const [data, total] = await Promise.all([
@@ -29,6 +29,7 @@ export const formulaController = {
         pagination: { page, limit, total, pages: Math.ceil(total / limit) },
       });
     } catch (error: any) {
+      console.error("Get formulas error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },
@@ -36,15 +37,21 @@ export const formulaController = {
   async createFormula(req: Request, res: Response) {
     try {
       const { title, content, images } = req.body;
-      if (!title || !content)
+      if (!title || !content) {
         return res
           .status(400)
-          .json({ success: false, message: "Title and content required" });
+          .json({ success: false, message: "Title and content are required" });
+      }
       const formula = await prisma.formula.create({
-        data: { title, content, images: images || [] },
+        data: {
+          title,
+          content,
+          images: images || [],
+        },
       });
       res.status(201).json({ success: true, data: formula });
     } catch (error: any) {
+      console.error("Create formula error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },
@@ -59,6 +66,7 @@ export const formulaController = {
       });
       res.json({ success: true, data: formula });
     } catch (error: any) {
+      console.error("Update formula error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },
@@ -69,6 +77,7 @@ export const formulaController = {
       await prisma.formula.delete({ where: { id } });
       res.json({ success: true, message: "Formula deleted" });
     } catch (error: any) {
+      console.error("Delete formula error:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   },

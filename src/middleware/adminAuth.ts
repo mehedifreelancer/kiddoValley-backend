@@ -1,15 +1,8 @@
+// src/middleware/adminAuth.ts
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-export interface AdminRequest extends Request {
-  admin?: {
-    id: number;
-    email: string;
-    role: string;
-  };
-}
-
-export const adminAuth = (req: AdminRequest, res: Response, next: NextFunction) => {
+export const adminAuth = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -25,7 +18,7 @@ export const adminAuth = (req: AdminRequest, res: Response, next: NextFunction) 
   if (!accessSecret) {
     return res.status(500).json({
       success: false,
-      message: "Server configuration error"
+      message: "Server configuration error",
     });
   }
 
@@ -36,14 +29,8 @@ export const adminAuth = (req: AdminRequest, res: Response, next: NextFunction) 
       role: string;
     };
 
-    if (decoded.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Admin privileges required.",
-      });
-    }
-
-    req.admin = decoded;
+    // ✅ শুধু ডিকোড করে req.user-এ সেট করুন, রোল চেক করবেন না
+    (req as any).user = decoded;
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {

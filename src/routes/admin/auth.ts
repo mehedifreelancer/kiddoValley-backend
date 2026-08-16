@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import { authController } from '../../controllers/authController';
-import { adminAuth } from '../../middleware/adminAuth';
+import { Router } from "express";
+import { authController } from "../../controllers/authController";
+import { adminAuth } from "../../middleware/adminAuth";
 
 const router = Router();
 
@@ -35,7 +35,7 @@ const router = Router();
  *       401:
  *         description: Invalid credentials
  */
-router.post('/login', authController.login);
+router.post("/login", authController.login);
 
 /**
  * @swagger
@@ -73,7 +73,7 @@ router.post('/login', authController.login);
  *       400:
  *         description: Admin already exists or validation error
  */
-router.post('/setup', authController.setupAdmin);
+router.post("/setup", authController.setupAdmin);
 
 /**
  * @swagger
@@ -110,7 +110,7 @@ router.post('/setup', authController.setupAdmin);
  *       401:
  *         description: Invalid or expired refresh token
  */
-router.post('/refresh-token', authController.refreshToken);
+router.post("/refresh-token", authController.refreshToken);
 
 /**
  * @swagger
@@ -153,7 +153,7 @@ router.post('/refresh-token', authController.refreshToken);
  *       403:
  *         description: Forbidden - Admin privileges required
  */
-router.get('/profile', adminAuth, authController.getProfile);
+router.get("/profile", adminAuth, authController.getProfile);
 
 /**
  * @swagger
@@ -189,7 +189,7 @@ router.get('/profile', adminAuth, authController.getProfile);
  *       403:
  *         description: Admin privileges required
  */
-router.put('/change-password', adminAuth, authController.changePassword);
+router.put("/change-password", adminAuth, authController.changePassword);
 
 /**
  * @swagger
@@ -205,6 +205,6 @@ router.put('/change-password', adminAuth, authController.changePassword);
  *       401:
  *         description: Unauthorized
  */
-router.post('/logout', adminAuth, authController.logout);
-
+router.post("/logout", adminAuth, authController.logout);
+router.get("/me", adminAuth, authController.getProfile);
 export default router;

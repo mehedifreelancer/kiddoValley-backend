@@ -1,38 +1,36 @@
-import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { prisma } from '../lib/prisma';
-
-// Extend Request type to include admin property
-interface AdminRequest extends Request {
-  admin?: {
-    id: number;
-    email: string;
-    role: string;
-  };
-};
+// src/controllers/authController.ts
+import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { prisma } from "../lib/prisma";
 
 // Generate Access Token (1 hour)
-const generateAccessToken = (user: { id: number; email: string; role: string }) => {
+const generateAccessToken = (user: {
+  id: number;
+  email: string;
+  role: string;
+}) => {
   const accessSecret = process.env.ACCESS_TOKEN_SECRET;
-  if (!accessSecret) throw new Error('ACCESS_TOKEN_SECRET not configured');
-  
+  if (!accessSecret) throw new Error("ACCESS_TOKEN_SECRET not configured");
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     accessSecret as jwt.Secret,
-    { expiresIn: '1h' }
+    { expiresIn: "1h" },
   );
 };
 
 // Generate Refresh Token (7 days)
-const generateRefreshToken = (user: { id: number; email: string; role: string }) => {
+const generateRefreshToken = (user: {
+  id: number;
+  email: string;
+  role: string;
+}) => {
   const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
-  if (!refreshSecret) throw new Error('REFRESH_TOKEN_SECRET not configured');
-  
+  if (!refreshSecret) throw new Error("REFRESH_TOKEN_SECRET not configured");
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     refreshSecret as jwt.Secret,
-    { expiresIn: '7d' }
+    { expiresIn: "7d" },
   );
 };
 
@@ -45,30 +43,27 @@ export const authController = {
       if (!usernameOrEmail || !password) {
         return res.status(400).json({
           success: false,
-          message: 'Username/Email and password are required'
+          message: "Username/Email and password are required",
         });
       }
 
       const user = await prisma.user.findFirst({
         where: {
-          OR: [
-            { username: usernameOrEmail },
-            { email: usernameOrEmail }
-          ]
-        }
+          OR: [{ username: usernameOrEmail }, { email: usernameOrEmail }],
+        },
       });
 
       if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid credentials'
+          message: "Invalid credentials",
         });
       }
 
       if (!user.isActive) {
         return res.status(401).json({
           success: false,
-          message: 'Account is deactivated. Please contact admin.'
+          message: "Account is deactivated. Please contact admin.",
         });
       }
 
@@ -77,32 +72,32 @@ export const authController = {
       if (!isValidPassword) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid credentials'
+          message: "Invalid credentials",
         });
       }
 
       // Update last login
       await prisma.user.update({
         where: { id: user.id },
-        data: { lastLogin: new Date() }
+        data: { lastLogin: new Date() },
       });
 
       // Generate tokens
       const accessToken = generateAccessToken({
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
       });
-      
+
       const refreshToken = generateRefreshToken({
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
       });
 
       res.json({
         success: true,
-        message: 'Login successful',
+        message: "Login successful",
         accessToken,
         refreshToken,
         user: {
@@ -110,14 +105,14 @@ export const authController = {
           username: user.username,
           name: user.name,
           email: user.email,
-          role: user.role
-        }
+          role: user.role,
+        },
       });
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to login'
+        message: error.message || "Failed to login",
       });
     }
   },
@@ -130,13 +125,13 @@ export const authController = {
       if (!refreshToken) {
         return res.status(401).json({
           success: false,
-          message: 'Refresh token required'
+          message: "Refresh token required",
         });
       }
 
       const refreshSecret = process.env.REFRESH_TOKEN_SECRET;
       if (!refreshSecret) {
-        throw new Error('REFRESH_TOKEN_SECRET not configured');
+        throw new Error("REFRESH_TOKEN_SECRET not configured");
       }
 
       // Verify refresh token
@@ -148,13 +143,13 @@ export const authController = {
 
       // Check if user exists and is active
       const user = await prisma.user.findUnique({
-        where: { id: decoded.id }
+        where: { id: decoded.id },
       });
 
       if (!user || !user.isActive) {
         return res.status(401).json({
           success: false,
-          message: 'Invalid refresh token'
+          message: "Invalid refresh token",
         });
       }
 
@@ -162,42 +157,42 @@ export const authController = {
       const newAccessToken = generateAccessToken({
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
       });
 
       // Optional: Rotate refresh token (generate new one for security)
       const newRefreshToken = generateRefreshToken({
         id: user.id,
         email: user.email,
-        role: user.role
+        role: user.role,
       });
 
       res.json({
         success: true,
         accessToken: newAccessToken,
-        refreshToken: newRefreshToken
+        refreshToken: newRefreshToken,
       });
     } catch (error: any) {
-      console.error('Refresh token error:', error);
+      console.error("Refresh token error:", error);
       res.status(401).json({
         success: false,
-        message: 'Invalid or expired refresh token'
+        message: "Invalid or expired refresh token",
       });
     }
   },
 
-  // Logout - just return success (frontend will clear tokens)
-  async logout(req: AdminRequest, res: Response) {
+  // Logout – just return success (frontend will clear tokens)
+  async logout(req: Request, res: Response) {
     try {
       res.json({
         success: true,
-        message: 'Logged out successfully'
+        message: "Logged out successfully",
       });
     } catch (error: any) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to logout'
+        message: error.message || "Failed to logout",
       });
     }
   },
@@ -208,56 +203,56 @@ export const authController = {
       const { username, name, email, password } = req.body;
 
       const existingAdmin = await prisma.user.findFirst({
-        where: { role: 'admin' }
+        where: { role: "admin" },
       });
 
       if (existingAdmin) {
         return res.status(400).json({
           success: false,
-          message: 'Admin user already exists'
+          message: "Admin user already exists",
         });
       }
 
       if (!username || !name || !email || !password) {
         return res.status(400).json({
           success: false,
-          message: 'Username, name, email and password are required'
+          message: "Username, name, email and password are required",
         });
       }
 
       if (username.length < 3) {
         return res.status(400).json({
           success: false,
-          message: 'Username must be at least 3 characters'
+          message: "Username must be at least 3 characters",
         });
       }
 
       if (password.length < 6) {
         return res.status(400).json({
           success: false,
-          message: 'Password must be at least 6 characters'
+          message: "Password must be at least 6 characters",
         });
       }
 
       const existingUsername = await prisma.user.findUnique({
-        where: { username }
+        where: { username },
       });
 
       if (existingUsername) {
         return res.status(400).json({
           success: false,
-          message: 'Username already taken'
+          message: "Username already taken",
         });
       }
 
       const existingEmail = await prisma.user.findUnique({
-        where: { email }
+        where: { email },
       });
 
       if (existingEmail) {
         return res.status(400).json({
           success: false,
-          message: 'Email already registered'
+          message: "Email already registered",
         });
       }
 
@@ -269,45 +264,118 @@ export const authController = {
           name,
           email,
           password: hashedPassword,
-          role: 'admin',
-          isActive: true
-        }
+          role: "admin",
+          isActive: true,
+        },
       });
 
       res.status(201).json({
         success: true,
-        message: 'Admin user created successfully',
+        message: "Admin user created successfully",
         data: {
           id: admin.id,
           username: admin.username,
           name: admin.name,
           email: admin.email,
-          role: admin.role
-        }
+          role: admin.role,
+        },
       });
     } catch (error: any) {
-      console.error('Setup admin error:', error);
+      console.error("Setup admin error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to create admin'
+        message: error.message || "Failed to create admin",
       });
     }
   },
 
-  // Get admin profile
-  async getProfile(req: AdminRequest, res: Response) {
+  // ==================== ✅ Updated changePassword ====================
+  async changePassword(req: Request, res: Response) {
     try {
-      const admin = req.admin;
+      // ✅ 'req.user' from adminAuth (not req.admin)
+      const user = (req as any).user;
+      const { currentPassword, newPassword } = req.body;
 
-      if (!admin) {
+      if (!user) {
         return res.status(401).json({
           success: false,
-          message: 'Unauthorized'
+          message: "Unauthorized",
         });
       }
 
-      const user = await prisma.user.findUnique({
-        where: { id: admin.id },
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Current password and new password are required",
+        });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "New password must be at least 6 characters",
+        });
+      }
+
+      // Find user in DB
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+      });
+
+      if (!dbUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      // Verify current password
+      const isValidPassword = await bcrypt.compare(
+        currentPassword,
+        dbUser.password,
+      );
+
+      if (!isValidPassword) {
+        return res.status(401).json({
+          success: false,
+          message: "Current password is incorrect",
+        });
+      }
+
+      // Hash new password and update
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword },
+      });
+
+      res.json({
+        success: true,
+        message: "Password changed successfully",
+      });
+    } catch (error: any) {
+      console.error("Change password error:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to change password",
+      });
+    }
+  },
+
+  // Get profile (uses req.user)
+  async getProfile(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: "Unauthorized",
+        });
+      }
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
         select: {
           id: true,
           username: true,
@@ -316,95 +384,26 @@ export const authController = {
           role: true,
           isActive: true,
           lastLogin: true,
-          createdAt: true,
-          updatedAt: true
-        }
+        },
       });
 
-      if (!user) {
+      if (!dbUser) {
         return res.status(404).json({
           success: false,
-          message: 'User not found'
+          message: "User not found",
         });
       }
 
       res.json({
         success: true,
-        data: user
+        data: dbUser,
       });
     } catch (error: any) {
-      console.error('Get profile error:', error);
+      console.error("Get profile error:", error);
       res.status(500).json({
         success: false,
-        message: error.message || 'Failed to get profile'
+        message: error.message || "Failed to get profile",
       });
     }
   },
-
-  // Change admin password
-  async changePassword(req: AdminRequest, res: Response) {
-    try {
-      const admin = req.admin;
-      const { currentPassword, newPassword } = req.body;
-
-      if (!admin) {
-        return res.status(401).json({
-          success: false,
-          message: 'Unauthorized'
-        });
-      }
-
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({
-          success: false,
-          message: 'Current password and new password are required'
-        });
-      }
-
-      if (newPassword.length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'New password must be at least 6 characters'
-        });
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { id: admin.id }
-      });
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: 'User not found'
-        });
-      }
-
-      const isValidPassword = await bcrypt.compare(currentPassword, user.password);
-
-      if (!isValidPassword) {
-        return res.status(401).json({
-          success: false,
-          message: 'Current password is incorrect'
-        });
-      }
-
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      await prisma.user.update({
-        where: { id: admin.id },
-        data: { password: hashedPassword }
-      });
-
-      res.json({
-        success: true,
-        message: 'Password changed successfully'
-      });
-    } catch (error: any) {
-      console.error('Change password error:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to change password'
-      });
-    }
-  }
 };

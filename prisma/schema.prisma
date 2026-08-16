@@ -13,7 +13,7 @@ model User {
   email     String    @unique
   password  String
   name      String
-  role      String    @default("cashier")
+  role      UserRole  @default(data_accountant) // 👈 নতুন
   isActive  Boolean   @default(true)
   lastLogin DateTime?
   createdAt DateTime  @default(now())
@@ -447,4 +447,22 @@ model CampaignDailyStat {
 
   @@unique([campaignId, date])
   @@map("campaign_daily_stats")
+}
+
+enum UserRole {
+  super_admin
+  admin
+  data_accountant
+  moderator
+}
+
+model Formula {
+  id        Int      @id @default(autoincrement())
+  title     String
+  content   String   @db.Text
+  images    Json? // array of image URLs (strings)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("formulas")
 }

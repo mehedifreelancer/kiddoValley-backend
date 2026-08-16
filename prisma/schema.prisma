@@ -172,8 +172,10 @@ model Order {
 
   refunds Refund[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  campaignId Int?
 
   @@map("orders")
 }
@@ -415,4 +417,34 @@ model RawMaterial {
   updatedAt   DateTime @updatedAt
 
   @@map("raw_materials")
+}
+
+model Campaign {
+  id               Int       @id @default(autoincrement())
+  title            String
+  perDayBudget     Float
+  status           String    @default("active")
+  stoppedAt        DateTime? // 🆕 stop button click korle set hobe
+  estimatedEndDate DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  dailyStats CampaignDailyStat[]
+  orders     Order[]
+
+  @@map("campaigns")
+}
+
+model CampaignDailyStat {
+  id         Int      @id @default(autoincrement())
+  campaignId Int
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  date       DateTime @default(now())
+  spend      Float    @default(0)
+  profit     Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([campaignId, date])
+  @@map("campaign_daily_stats")
 }

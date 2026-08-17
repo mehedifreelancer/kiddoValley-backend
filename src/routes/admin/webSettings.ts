@@ -62,5 +62,14 @@ router.post(
   adminAuth,
   webSettingsController.updatePackagingSettings,
 );
-
+router.get(
+  "/layout-settings",
+  adminAuth,
+  webSettingsController.getLayoutSettings,
+);
+router.put(
+  "/layout-settings",
+  adminAuth,
+  webSettingsController.updateLayoutSettings,
+);
 export default router;

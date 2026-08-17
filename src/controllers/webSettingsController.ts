@@ -317,4 +317,65 @@ export const webSettingsController = {
       });
     }
   },
+  async getLayoutSettings(req: Request, res: Response) {
+    try {
+      let settings = await prisma.layoutSettings.findUnique({
+        where: { id: 1 },
+      });
+      if (!settings) {
+        // Create default if not exists
+        settings = await prisma.layoutSettings.create({
+          data: {
+            gridClasses:
+              "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4",
+          },
+        });
+      }
+      res.json({ success: true, data: settings });
+    } catch (error: any) {
+      console.error("Get layout settings error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  async updateLayoutSettings(req: Request, res: Response) {
+    try {
+      const { gridClasses } = req.body;
+      if (!gridClasses) {
+        return res
+          .status(400)
+          .json({ success: false, message: "gridClasses is required" });
+      }
+      const settings = await prisma.layoutSettings.upsert({
+        where: { id: 1 },
+        update: { gridClasses },
+        create: { gridClasses },
+      });
+      res.json({ success: true, data: settings });
+    } catch (error: any) {
+      console.error("Update layout settings error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+  async getPublicLayoutSettings(req: Request, res: Response) {
+    try {
+      let settings = await prisma.layoutSettings.findUnique({
+        where: { id: 1 },
+      });
+      if (!settings) {
+        // Return default if not found (without creating)
+        return res.json({
+          success: true,
+          data: {
+            gridClasses:
+              "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
+          },
+        });
+      }
+      res.json({ success: true, data: settings });
+    } catch (error: any) {
+      console.error("Get public layout settings error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 };

@@ -67,7 +67,10 @@ ${text}
     const response = await axios.post(
       GROQ_URL,
       {
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
+        // Option 2: Qwen 3.6 (alternative)
+        // model: "qwen/qwen3.6-27b",
+
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         response_format: { type: "json_object" },

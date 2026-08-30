@@ -807,4 +807,87 @@ export const stockController = {
       });
     }
   },
+  async adjustStock(req: Request, res: Response) {
+    try {
+      const { stockId, quantity, reasonType, customReason, imageUrl } =
+        req.body;
+
+      if (!stockId || !quantity || quantity <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Valid stockId and quantity are required",
+        });
+      }
+
+      const validReasons = ["lost", "damaged", "count_mistake", "other"];
+      if (!reasonType || !validReasons.includes(reasonType)) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid reason is required",
+        });
+      }
+
+      if (reasonType === "other" && !customReason?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Please specify a reason when selecting 'Other'",
+        });
+      }
+
+      const stock = await prisma.stock.findUnique({
+        where: { id: stockId },
+        include: { variant: { select: { productId: true } } },
+      });
+
+      if (!stock) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Stock not found" });
+      }
+
+      if (stock.currentQty < quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot adjust ${quantity} units. Only ${stock.currentQty} currently in stock.`,
+        });
+      }
+
+      const reasonLabels: Record<string, string> = {
+        lost: "Lost",
+        damaged: "Damaged",
+        count_mistake: "Count Mistake",
+        other: customReason?.trim(),
+      };
+
+      // LOST gets its own movement type for reporting; the rest are ADJUSTMENTs
+      const movementType = reasonType === "lost" ? "LOST" : "ADJUSTMENT";
+
+      const [updatedStock] = await prisma.$transaction([
+        prisma.stock.update({
+          where: { id: stockId },
+          data: { currentQty: { decrement: quantity } },
+        }),
+        prisma.stockMovement.create({
+          data: {
+            stockId,
+            productId: stock.variant.productId,
+            type: movementType,
+            quantity: -quantity,
+            reason: reasonLabels[reasonType],
+            imageUrl: imageUrl?.trim() || null,
+            createdBy: (req as any).admin?.id,
+          },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        message: "Stock adjusted successfully",
+        data: updatedStock,
+      });
+    } catch (error: any) {
+      console.error("Adjust stock error:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
 };

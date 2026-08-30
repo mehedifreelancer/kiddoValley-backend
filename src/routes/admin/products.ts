@@ -12,17 +12,18 @@ router.post(
   "/create",
   adminAuth,
   uploadProductThumbnail, // ✅ single file, field 'thumbnail'
-  productController.create
+  productController.create,
 );
 
 router.put(
   "/edit/:id",
   adminAuth,
   uploadProductThumbnail,
-  productController.update
+  productController.update,
 );
 
 router.delete("/delete/:id", adminAuth, productController.delete);
 router.patch("/publish/:id", adminAuth, productController.publish);
+router.patch("/toggle-publish/:id", adminAuth, productController.togglePublish);
 
 export default router;

@@ -45,5 +45,6 @@ router.post("/stock-in/create", adminAuth, stockController.stockIn);
 
 // ✅ নতুন route – stock discount update (Edit বাটনের জন্য)
 router.patch("/:id/discount", adminAuth, stockController.updateDiscount);
+router.post("/adjust", adminAuth, stockController.adjustStock);
 
 export default router;

@@ -108,12 +108,14 @@ model Stock {
 }
 
 model StockMovement {
-  id          Int      @id @default(autoincrement())
-  stockId     Int
-  stock       Stock    @relation(fields: [stockId], references: [id])
-  productId   Int
-  type        String // PURCHASE, SALE, ADJUSTMENT, PRICE_CHANGE, RETURN, WASTAGE, LOST, FOUND
-  quantity    Int // positive for addition, negative for removal
+  id        Int     @id @default(autoincrement())
+  stockId   Int
+  stock     Stock   @relation(fields: [stockId], references: [id])
+  productId Int
+  type      String // PURCHASE, SALE, ADJUSTMENT, PRICE_CHANGE, RETURN, WASTAGE, LOST, FOUND
+  quantity  Int // positive for addition, negative for removal
+  imageUrl  String? @db.Text // 👈 new
+
   reason      String?
   referenceId Int? // orderId, purchaseId, etc.
   createdAt   DateTime @default(now())
@@ -121,6 +123,7 @@ model StockMovement {
 
   @@map("stock_movements")
 }
+
 
 model CustomerInfo {
   phone          String   @id @unique

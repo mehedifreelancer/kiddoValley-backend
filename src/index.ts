@@ -26,7 +26,6 @@ import webSettingsRoutes from "./routes/admin/webSettings";
 import adminHeroSliderRoutes from "./routes/admin/heroSliders";
 import publicHeroSliderRoutes from "./routes/public/heroSliders";
 import publicOrderRoutes from "./routes/public/orders";
-import publicWebSettingsRoutes from "./routes/public/webSettings";
 import publicStockRoutes from "./routes/public/stock";
 import publicOrderTrackingRoutes from "./routes/public/orderTracking";
 import adminOrderTrackingRoutes from "./routes/admin/orderTracking";
@@ -40,6 +39,7 @@ import accountRoutes from "./routes/admin/account";
 import liveCampaignRoutes from "./routes/admin/liveCampaign";
 import userRoutes from "./routes/admin/user";
 import formulaRoutes from "./routes/admin/formula";
+import publicWebSettingsRoutes from "./routes/public/webSettings";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -143,7 +143,6 @@ app.use("/api/admin/account", accountRoutes);
 app.use("/api/admin/live-campaign", liveCampaignRoutes);
 app.use("/api/admin/users", userRoutes);
 app.use("/api/admin/formulas", formulaRoutes);
-
 
 // Health check
 app.get("/", (req: Request, res: Response) => {

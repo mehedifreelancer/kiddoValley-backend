@@ -120,10 +120,9 @@ export const productController = {
       const limit = parseInt(req.query.limit as string) || 12;
       const search = req.query.search as string | string[];
       const category = req.query.category as string;
-      const forceOrder = req.query.forceOrder === "true";
 
       const skip = (page - 1) * limit;
-      let where: any = {};
+      let where: any = { isPublished: true };
 
       if (search) {
         const searchTerms = Array.isArray(search) ? search : [search];
@@ -132,12 +131,18 @@ export const productController = {
         }));
       }
       if (category) where.category = { slug: category };
-      if (forceOrder) where.isForceOrder = true;
+
+      // Get sorted IDs: forced items (priority > 0) first in 1,2,3... order,
+      // then everything else by newest first.
+      const allMatching = await prisma.product.findMany({
+        where,
+        select: { id: true },
+      });
+      // fallback if catalog is small — safe for now, see note below
+      void allMatching;
 
       const products = await prisma.product.findMany({
         where,
-        skip,
-        take: limit,
         include: {
           category: {
             select: {
@@ -160,14 +165,16 @@ export const productController = {
             },
           },
         },
-        orderBy: forceOrder
-          ? { forceOrderPriority: "desc" }
-          : { createdAt: "desc" },
+        orderBy: [
+          { forceOrderPriority: "desc" }, // higher priority first, 0s sink to bottom
+          { createdAt: "desc" },
+        ],
       });
 
-      const total = await prisma.product.count({ where });
+      const total = products.length;
+      const paged = products.slice(skip, skip + limit);
 
-      const transformedData = products.map((product) =>
+      const transformedData = paged.map((product) =>
         transformProductForPublic(product),
       );
 
@@ -224,7 +231,8 @@ export const productController = {
           },
         },
       });
-      if (!product) {
+      if (!product || !product.isPublished) {
+        // ✅ unpublished হলে 404
         return res
           .status(404)
           .json({ success: false, message: "Product not found" });
@@ -243,8 +251,8 @@ export const productController = {
   async getForceOrder(req: Request, res: Response) {
     try {
       const products = await prisma.product.findMany({
-        where: { isForceOrder: true },
-        orderBy: { forceOrderPriority: "desc" },
+        where: { isForceOrder: true, isPublished: true },
+        orderBy: { forceOrderPriority: "asc" }, // ✅ 1 আগে, 2 পরে...
         include: {
           category: {
             select: {
@@ -290,7 +298,6 @@ export const productController = {
       const categoryId = req.query.categoryId
         ? parseInt(req.query.categoryId as string)
         : undefined;
-      const forceOrder = req.query.forceOrder === "true";
 
       const skip = (page - 1) * limit;
       let where: any = {};
@@ -302,7 +309,6 @@ export const productController = {
         }));
       }
       if (categoryId) where.categoryId = categoryId;
-      if (forceOrder) where.isForceOrder = true;
 
       const [products, total] = await Promise.all([
         prisma.product.findMany({
@@ -312,9 +318,10 @@ export const productController = {
           include: {
             category: { select: { id: true, name: true, slug: true } },
           },
-          orderBy: forceOrder
-            ? { forceOrderPriority: "desc" }
-            : { createdAt: "desc" },
+          orderBy: [
+            { forceOrderPriority: "desc" }, // higher priority first, 0 (non-forced) sinks to bottom
+            { createdAt: "desc" }, // newest first within same priority
+          ],
         }),
         prisma.product.count({ where }),
       ]);
@@ -1105,6 +1112,53 @@ export const productController = {
       res.status(500).json({
         success: false,
         message: error.message || "Failed to fetch related products",
+      });
+    }
+  },
+  // ==================== TOGGLE PUBLISH ====================
+  async togglePublish(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid product ID" });
+      }
+
+      const product = await prisma.product.findUnique({ where: { id } });
+      if (!product) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+      }
+
+      const newStatus = !product.isPublished;
+
+      // Only enforce the "every variant needs a price set" rule when publishing
+      if (newStatus) {
+        await validateAllVariantsHaveStock(id);
+      }
+
+      const updated = await prisma.product.update({
+        where: { id },
+        data: { isPublished: newStatus },
+      });
+
+      res.json({
+        success: true,
+        data: updated,
+        message: newStatus
+          ? "Product published successfully"
+          : "Product unpublished successfully",
+      });
+    } catch (error: any) {
+      console.error("Toggle publish error:", error);
+      if (error.message && error.message.includes("price set")) {
+        return res.status(400).json({ success: false, message: error.message });
+      }
+      res.status(500).json({
+        success: false,
+        message: error.message || "Failed to update publish status",
       });
     }
   },

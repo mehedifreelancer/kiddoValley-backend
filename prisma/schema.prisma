@@ -124,7 +124,6 @@ model StockMovement {
   @@map("stock_movements")
 }
 
-
 model CustomerInfo {
   phone          String   @id @unique
   name           String
@@ -188,12 +187,13 @@ model SoldItem {
   orderId Int
   order   Order @relation(fields: [orderId], references: [id])
 
-  productName       String
-  variantSku        String
-  variantAttributes Json?
-  unitPrice         Float
-  totalPrice        Float
-  quantity          Int
+  productName          String
+  variantSku           String
+  variantAttributes    Json?
+  originalSellingPrice Float?
+  unitPrice            Float
+  totalPrice           Float
+  quantity             Int
 
   refundedAmount  Float   @default(0)
   isFullyRefunded Boolean @default(false)

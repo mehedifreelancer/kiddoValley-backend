@@ -272,6 +272,7 @@ export const orderController = {
               productId: variant.productId,
               variantId: variant.id,
               stockId: item.stockId,
+              originalSellingPrice: stock.sellingPrice,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,

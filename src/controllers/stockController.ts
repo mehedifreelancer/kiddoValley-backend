@@ -484,6 +484,7 @@ export const stockController = {
       if (isNaN(id)) {
         return res.status(400).json({ success: false, message: "Invalid ID" });
       }
+
       const stock = await prisma.stock.findUnique({ where: { id } });
       if (!stock) {
         return res
@@ -497,10 +498,31 @@ export const stockController = {
             "Cannot delete stock batch because it has quantity greater than 0. Please reduce stock to zero first.",
         });
       }
-      await prisma.stock.delete({ where: { id } });
+
+      // 👇 আসল ফিক্স: related records আগে সামলাও, তারপর stock delete করো
+      await prisma.$transaction(async (tx) => {
+        // Movement history এই ব্যাচের জন্য শুধু audit log, batch delete হলে এটাও চলে যাক
+        await tx.stockMovement.deleteMany({ where: { stockId: id } });
+
+        // Sold items হলো order history — মুছে ফেলা যাবে না, শুধু stockId রেফারেন্স খুলে দাও
+        await tx.soldItem.updateMany({
+          where: { stockId: id },
+          data: { stockId: null },
+        });
+
+        await tx.stock.delete({ where: { id } });
+      });
+
       res.json({ success: true, message: "Stock batch deleted" });
     } catch (error: any) {
       console.error("Delete stock error:", error);
+      if (error.code === "P2003") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "This stock batch still has related records blocking deletion.",
+        });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   },

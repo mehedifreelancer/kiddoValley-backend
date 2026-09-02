@@ -193,6 +193,7 @@ model SoldItem {
   originalSellingPrice Float?
   unitPrice            Float
   totalPrice           Float
+  buyingOrMakingPrice  Float?
   quantity             Int
 
   refundedAmount  Float   @default(0)

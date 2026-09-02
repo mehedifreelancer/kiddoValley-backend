@@ -272,8 +272,7 @@ export const orderController = {
               productId: variant.productId,
               variantId: variant.id,
               stockId: item.stockId,
-              originalSellingPrice: stock.sellingPrice, // snapshot
-              buyingOrMakingPrice: stock.buyingOrMakingPrice, // 🆕 snapshot
+              originalSellingPrice: stock.sellingPrice,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -531,8 +530,6 @@ export const orderController = {
               productId: stock.variant.productId,
               variantId: stock.variant.id,
               stockId: item.stockId,
-              originalSellingPrice: stock.sellingPrice, // 🆕 snapshot
-              buyingOrMakingPrice: stock.buyingOrMakingPrice, // 🆕 snapshot
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -929,8 +926,6 @@ export const orderController = {
               productId: stock.variant.productId,
               variantId: stock.variant.id,
               stockId: item.stockId,
-              originalSellingPrice: stock.sellingPrice, // 🆕 snapshot
-              buyingOrMakingPrice: stock.buyingOrMakingPrice, // 🆕 snapshot
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -1105,8 +1100,6 @@ export const orderController = {
               productId: stock.variant.productId,
               variantId: stock.variant.id,
               stockId: item.stockId,
-              originalSellingPrice: stock.sellingPrice, // 🆕 snapshot
-              buyingOrMakingPrice: stock.buyingOrMakingPrice, // 🆕 snapshot
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,

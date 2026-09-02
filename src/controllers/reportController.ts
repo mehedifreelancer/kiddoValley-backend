@@ -66,8 +66,8 @@ export const reportController = {
 
         // ---- ২. প্রতিটি আইটেমের জন্য ডেটা তৈরি ----
         const items = order.soldItems.map((item) => {
-          const buyPrice = item.stock?.buyingOrMakingPrice || 0;
-          const sellingPrice = item.stock?.sellingPrice || 0;
+          const buyPrice = item.buyingOrMakingPrice ?? 0; // snapshot
+          const sellingPrice = item.originalSellingPrice ?? 0; // snapshot — stock থেকে না
           const soldPrice = item.unitPrice;
           const weight = item.quantity;
           const grossProfit = (soldPrice - buyPrice) * weight;
@@ -289,12 +289,10 @@ export const reportController = {
       end.setHours(23, 59, 59, 999);
 
       if (start > end) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Start date must be before end date",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Start date must be before end date",
+        });
       }
 
       const transactions = await prisma.transaction.findMany({

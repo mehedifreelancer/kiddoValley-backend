@@ -602,12 +602,28 @@ export const productController = {
         updateData.weight = parseFloat(updateData.weight) || null;
       }
 
-      let thumbnail: string | null = req.body.existingThumbnail || null;
       if (file) {
         savedFilenames = saveImagesToDisk([file]);
-        thumbnail = `${req.protocol}://${req.get("host")}/uploads/product-images/${savedFilenames[0]}`;
+        const newThumb = `${req.protocol}://${req.get("host")}/uploads/product-images/${savedFilenames[0]}`;
+        if (existingProduct.thumbnail) {
+          const oldFilename = existingProduct.thumbnail.split("/").pop();
+          if (oldFilename) {
+            const oldPath = path.join(
+              process.cwd(),
+              "public/uploads/product-images",
+              oldFilename,
+            );
+            try {
+              if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            } catch (err) {
+              console.warn("Failed to delete old thumbnail:", oldFilename);
+            }
+          }
+        }
+        updateData.thumbnail = newThumb;
+      } else if (req.body.existingThumbnail !== undefined) {
+        updateData.thumbnail = req.body.existingThumbnail || null;
       }
-      updateData.thumbnail = thumbnail;
 
       if (updateData.isPublished === true) {
         await validateAllVariantsHaveStock(id);
@@ -796,19 +812,38 @@ export const productController = {
           .json({ success: false, message: "Product not found" });
       }
 
-      const soldItems = await prisma.soldItem.findMany({
-        where: { productId: id },
-        take: 1,
-      });
-      if (soldItems.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Cannot delete product with existing sales records",
-        });
-      }
+      const variantIds = product.variants.map((v) => v.id);
 
-      // ---- DELETE IMAGES FROM DISK ----
-      // 1. Delete product thumbnail
+      // ---- ধাপ ১: আগে সব DB রেকর্ড ডিলিট (transaction, atomic) ----
+      await prisma.$transaction(async (tx) => {
+        if (variantIds.length) {
+          // ✅ sold items এর stockId খুলে দিন — বিক্রির ইতিহাস (snapshot) অক্ষত থাকবে
+          await tx.soldItem.updateMany({
+            where: { stock: { variantId: { in: variantIds } } },
+            data: { stockId: null },
+          });
+
+          await tx.stockMovement.deleteMany({
+            where: { stock: { variantId: { in: variantIds } } },
+          });
+          await tx.stock.deleteMany({
+            where: { variantId: { in: variantIds } },
+          });
+
+          // যদি cart/wishlist/review ইত্যাদি থাকে, এখানে যোগ করুন
+
+          await tx.variant.deleteMany({
+            where: { productId: id },
+          });
+        }
+        await tx.productSupplier.deleteMany({ where: { productId: id } });
+        await tx.manufacture.deleteMany({ where: { productId: id } });
+        await tx.product.delete({ where: { id } });
+      });
+
+      // ---- ধাপ ২: DB delete সফল হলেই শুধু disk থেকে images মুছুন ----
+
+      // ✅ Thumbnail মুছুন
       if (product.thumbnail) {
         const filename = product.thumbnail.split("/").pop();
         if (filename) {
@@ -825,50 +860,25 @@ export const productController = {
         }
       }
 
-      // 2. Delete variant images
-      const variants = await prisma.variant.findMany({
-        where: { productId: id },
-        select: { images: true },
-      });
-      for (const variant of variants) {
-        const images = variant.images as any[];
-        if (images && images.length > 0) {
-          for (const img of images) {
-            const filename = img.imgUrl.split("/").pop();
-            if (filename) {
-              const filePath = path.join(
-                process.cwd(),
-                "public/uploads/product-images",
-                filename,
-              );
-              try {
-                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-              } catch (err) {
-                console.warn("Failed to delete variant image:", filename);
-              }
+      // ✅ প্রতিটি variant-এর সব images মুছুন
+      for (const variant of product.variants) {
+        const images = (variant.images as any[]) || [];
+        for (const img of images) {
+          const filename = img.imgUrl?.split("/").pop();
+          if (filename) {
+            const filePath = path.join(
+              process.cwd(),
+              "public/uploads/product-images",
+              filename,
+            );
+            try {
+              if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            } catch (err) {
+              console.warn("Failed to delete variant image:", filename);
             }
           }
         }
       }
-
-      // ---- DELETE DATABASE RECORDS ----
-      await prisma.$transaction(async (tx) => {
-        const variantIds = product.variants.map((v) => v.id);
-        if (variantIds.length) {
-          await tx.stockMovement.deleteMany({
-            where: { stock: { variantId: { in: variantIds } } },
-          });
-          await tx.stock.deleteMany({
-            where: { variantId: { in: variantIds } },
-          });
-          await tx.variant.deleteMany({
-            where: { productId: id },
-          });
-        }
-        await tx.productSupplier.deleteMany({ where: { productId: id } });
-        await tx.manufacture.deleteMany({ where: { productId: id } });
-        await tx.product.delete({ where: { id } });
-      });
 
       res.json({
         success: true,
@@ -877,6 +887,16 @@ export const productController = {
       });
     } catch (error: any) {
       console.error("Delete product error:", error);
+      console.error("Prisma error code:", error.code);
+      console.error("Prisma meta:", error.meta);
+
+      if (error.code === "P2003") {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot delete: related records still exist (${error.meta?.field_name || "unknown field"}). Please check dependent tables.`,
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: error.message || "Failed to delete product",

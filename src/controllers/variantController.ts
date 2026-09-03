@@ -396,7 +396,7 @@ export const variantController = {
           .status(404)
           .json({ success: false, message: "Variant not found" });
       }
-      // ✅ Prevent deletion if any stock batch has currentQty > 0
+
       if (variant.stocks.some((s) => s.currentQty > 0)) {
         return res.status(400).json({
           success: false,
@@ -404,7 +404,8 @@ export const variantController = {
             "Cannot delete variant because it has stock with positive quantity. Please reduce stock to zero first.",
         });
       }
-      // Delete images from disk (your existing code)
+
+      // ছবি ডিস্ক থেকে মুছুন
       const images = variant.images as any[];
       if (images && images.length > 0) {
         for (const img of images) {
@@ -421,13 +422,33 @@ export const variantController = {
           }
         }
       }
-      await prisma.$transaction([
-        prisma.manufacture.deleteMany({ where: { variantId: id } }),
-        prisma.variant.delete({ where: { id } }),
-      ]);
+
+      await prisma.$transaction(async (tx) => {
+        // ✅ sold items এর stockId খুলে দিন — historical data অক্ষত থাকবে,
+        // শুধু live stock রেফারেন্সটা মুছে যাবে
+        await tx.soldItem.updateMany({
+          where: { stock: { variantId: id } },
+          data: { stockId: null },
+        });
+
+        await tx.stockMovement.deleteMany({
+          where: { stock: { variantId: id } },
+        });
+        await tx.stock.deleteMany({ where: { variantId: id } });
+        await tx.manufacture.deleteMany({ where: { variantId: id } });
+
+        await tx.variant.delete({ where: { id } });
+      });
+
       res.json({ success: true, message: "Variant deleted" });
     } catch (error: any) {
       console.error("Delete variant error:", error);
+      if (error.code === "P2003") {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot delete: related records still exist (${error.meta?.field_name || "unknown field"}).`,
+        });
+      }
       res.status(500).json({ success: false, message: error.message });
     }
   },

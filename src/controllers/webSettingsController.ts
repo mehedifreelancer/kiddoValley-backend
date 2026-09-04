@@ -30,6 +30,15 @@ async function getWebSettings(): Promise<any> {
       logoUrl: null,
       socialLinks: { facebook: "", instagram: "", youtube: "", website: "" },
       footerText: "",
+      contactInfo: {
+        phone: "",
+        email: "",
+        facebookPage: "",
+        whatsapp: "",
+        address: "",
+        workingHours: "",
+        workingHoursWeekend: "",
+      },
     };
   }
 
@@ -67,6 +76,15 @@ async function getWebSettings(): Promise<any> {
       logoUrl: null,
       socialLinks: { facebook: "", instagram: "", youtube: "", website: "" },
       footerText: "",
+      contactInfo: {
+        phone: "",
+        email: "",
+        facebookPage: "",
+        whatsapp: "",
+        address: "",
+        workingHours: "",
+        workingHoursWeekend: "",
+      },
     };
   }
 }
@@ -119,7 +137,7 @@ export const webSettingsController = {
     let oldLogoPath: string | null = null;
 
     try {
-      const { socialLinks, footerText, logoUrl } = req.body;
+      const { socialLinks, footerText, logoUrl, contactInfo } = req.body;
       const file = req.file;
 
       // 🔍 DEBUG — remove once confirmed working
@@ -156,7 +174,30 @@ export const webSettingsController = {
       const mergedFooterText =
         footerText !== undefined ? footerText : current.footerText || "";
 
-      // 4. Logo processing
+      // 4. 🆕 Merge contact info
+      let mergedContactInfo = current.contactInfo || {
+        phone: "",
+        email: "",
+        facebookPage: "",
+        whatsapp: "",
+        address: "",
+        workingHours: "",
+        workingHoursWeekend: "",
+      };
+      if (contactInfo) {
+        try {
+          const incomingContact = JSON.parse(contactInfo);
+          mergedContactInfo = { ...mergedContactInfo, ...incomingContact };
+        } catch (parseError) {
+          if (file) deleteFile(file.path);
+          return res.status(400).json({
+            success: false,
+            message: "Invalid contactInfo JSON",
+          });
+        }
+      }
+
+      // 5. Logo processing
       let newLogoUrl: string | null = current.logoUrl;
 
       if (logoUrl !== undefined && (logoUrl === "" || logoUrl === "null")) {
@@ -205,6 +246,7 @@ export const webSettingsController = {
         logoUrl: newLogoUrl,
         socialLinks: parsedSocial,
         footerText: mergedFooterText,
+        contactInfo: mergedContactInfo, // 🆕
       };
 
       await saveWebSettings(updatedData);
@@ -284,7 +326,7 @@ export const webSettingsController = {
     }
   },
 
-  // কন্ট্রোলার অবজেক্টের ভেতর (যেখানে delivery settings আছে, তার পাশে):
+  // Packaging Settings
   async getPackagingSettings(req: Request, res: Response) {
     try {
       const data = await getPackagingSettings();
@@ -317,6 +359,7 @@ export const webSettingsController = {
       });
     }
   },
+
   async getLayoutSettings(req: Request, res: Response) {
     try {
       let settings = await prisma.layoutSettings.findUnique({
@@ -357,6 +400,7 @@ export const webSettingsController = {
       res.status(500).json({ success: false, message: error.message });
     }
   },
+
   async getPublicLayoutSettings(req: Request, res: Response) {
     try {
       let settings = await prisma.layoutSettings.findUnique({

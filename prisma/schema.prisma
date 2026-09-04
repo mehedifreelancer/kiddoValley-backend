@@ -479,3 +479,13 @@ model LayoutSettings {
 
   @@map("layout_settings")
 }
+
+model Worksheet {
+  id        Int      @id @default(autoincrement())
+  title     String
+  filePath  String // path on server
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("worksheets")
+}

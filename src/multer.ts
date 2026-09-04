@@ -133,3 +133,34 @@ export const uploadHeroSliderImage = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter,
 });
+
+// ============================================
+// 6. WORKSHEET (PDF) – disk storage
+// ============================================
+const worksheetStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(process.cwd(), "public/uploads/worksheets");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `worksheet-${unique}${ext}`);
+  },
+});
+
+// PDF ফিল্টার (শুধু PDF অনুমোদন)
+const pdfFilter = (req: any, file: any, cb: any) => {
+  if (file.mimetype === "application/pdf") {
+    cb(null, true);
+  } else {
+    cb(new Error("Only PDF files are allowed"), false);
+  }
+};
+
+export const uploadWorksheet = multer({
+  storage: worksheetStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB (প্রয়োজনে বাড়ান)
+  fileFilter: pdfFilter,
+});

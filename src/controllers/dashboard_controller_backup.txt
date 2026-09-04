@@ -1,9 +1,10 @@
 import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
-import { calculateSalesFinancials } from "../utils/financials";
 
 export const dashboardController = {
-  // ---------- 1. OVERVIEW (single source of truth via calculateSalesFinancials) ----------
+  // ---------- 1. OVERVIEW (with refund deduction) ----------
+  // dashboardController.ts - শুধু getOverview মেথড আপডেট করা হয়েছে
+
   async getOverview(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -12,14 +13,20 @@ export const dashboardController = {
         endDate as string,
       );
 
+      // শুধু কনফর্মড/প্যাকড/ডেলিভার্ড অর্ডার বিবেচনা করব
       const whereOrder = {
         createdAt: { gte: start, lte: end },
         orderStatus: { in: ["confirmed", "packed", "delivered"] },
       };
 
-      const [totalOrders, totalCustomers, financials, productsSoldResult] =
+      // ১. অর্ডার ও গ্রাহক স্ট্যাট
+      const [totalOrders, totalRevenueBeforeRefund, totalCustomers] =
         await Promise.all([
           prisma.order.count({ where: whereOrder }),
+          prisma.order.aggregate({
+            where: whereOrder,
+            _sum: { total: true },
+          }),
           prisma.customerInfo.count({
             where: {
               orders: {
@@ -30,18 +37,9 @@ export const dashboardController = {
               },
             },
           }),
-          calculateSalesFinancials(start, end), // ✅ same function report/annual/daily সবাই ব্যবহার করে
-          prisma.$queryRaw`
-            SELECT SUM(s.quantity) as totalProductsSold
-            FROM \`sold_items\` s
-            JOIN \`orders\` o ON o.id = s.orderId
-            WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
-              AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
-          ` as Promise<any[]>,
         ]);
 
-      const { totalSalesAmount, totalRefunds, salesNetProfit } = financials;
-
+      // ২. রিফান্ড স্ট্যাটিস্টিক্স (type অনুযায়ী গ্রুপ)
       const refundStats = await prisma.refund.groupBy({
         by: ["type"],
         where: {
@@ -54,6 +52,7 @@ export const dashboardController = {
         _sum: { amount: true },
       });
 
+      // ডিফল্ট ০
       let partialCount = 0;
       let fullCount = 0;
       let partialAmount = 0;
@@ -69,28 +68,52 @@ export const dashboardController = {
         }
       });
 
-      const totalProductsSold =
-        Number(productsSoldResult[0]?.totalProductsSold) || 0;
+      const totalRefund = partialAmount + fullAmount;
 
-      const avgOrderValue =
-        totalOrders > 0 ? totalSalesAmount / totalOrders : 0;
-      const avgProfit = totalOrders > 0 ? salesNetProfit / totalOrders : 0;
+      // ৩. নেট রেভিনিউ
+      const totalRevenue =
+        (totalRevenueBeforeRefund._sum.total || 0) - totalRefund;
+
+      // ৪. মোট লাভ ও পণ্য বিক্রয় (রিফান্ডের আগে)
+      const profitAndQuantity: any[] = await prisma.$queryRaw`
+      SELECT 
+        SUM((s.unitPrice - st.buyingOrMakingPrice) * s.quantity) as totalProfit,
+        SUM(s.quantity) as totalProductsSold
+      FROM \`sold_items\` s
+      JOIN \`stocks\` st ON st.id = s.stockId
+      JOIN \`orders\` o ON o.id = s.orderId
+      WHERE o.createdAt >= ${start} AND o.createdAt <= ${end}
+        AND o.orderStatus IN ('confirmed', 'packed', 'delivered')
+    `;
+      const totalProfitBeforeRefund =
+        Number(profitAndQuantity[0]?.totalProfit) || 0;
+      const totalProductsSold =
+        Number(profitAndQuantity[0]?.totalProductsSold) || 0;
+
+      // ৫. নেট লাভ
+      const totalProfit = totalProfitBeforeRefund - totalRefund;
+
+      // ৬. গড় মান
+      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const avgProfit = totalOrders > 0 ? totalProfit / totalOrders : 0;
 
       res.json({
         success: true,
         data: {
+          // আগের কার্ডগুলো
           totalOrders,
-          totalRevenue: totalSalesAmount, // ✅ financials.ts থেকে (total, delivery সহ)
+          totalRevenue,
           totalCustomers,
           avgOrderValue,
-          totalProfit: salesNetProfit, // ✅ financials.ts থেকে (delivery/packaging profit-neutral)
+          totalProfit,
           totalProductsSold,
           avgProfit,
+
+          // ✅ নতুন ৪টি কার্ড
           totalPartialRefunds: partialCount,
           totalFullRefunds: fullCount,
           partialRefundAmount: partialAmount,
           fullRefundAmount: fullAmount,
-          totalRefunds, // ✅ financials থেকে, sanity check: partialAmount + fullAmount এর সমান হওয়া উচিত
         },
       });
     } catch (error: any) {
@@ -108,15 +131,18 @@ export const dashboardController = {
         endDate as string,
       );
 
+      // রিফান্ড বিবেচনায় এনে নেট সেলস ট্রেন্ড
+      // ১. প্রতিদিনের অর্ডার টোটাল
       const orders = await prisma.order.findMany({
         where: {
           createdAt: { gte: start, lte: end },
           orderStatus: { in: ["confirmed", "packed", "delivered"] },
         },
-        select: { createdAt: true, subtotal: true, id: true },
+        select: { createdAt: true, total: true, id: true },
         orderBy: { createdAt: "asc" },
       });
 
+      // ২. প্রতিদিনের রিফান্ড টোটাল
       const refunds: any[] = await prisma.$queryRaw`
         SELECT DATE(o.createdAt) as date, SUM(r.amount) as refundAmount
         FROM \`refunds\` r
@@ -135,9 +161,10 @@ export const dashboardController = {
       const grouped: Record<string, number> = {};
       orders.forEach((order) => {
         const date = order.createdAt.toISOString().split("T")[0];
-        grouped[date] = (grouped[date] || 0) + order.subtotal;
+        grouped[date] = (grouped[date] || 0) + order.total;
       });
 
+      // নেট সেলস = অর্ডার টোটাল - রিফান্ড
       const data = Object.keys(grouped).map((date) => ({
         date,
         total: grouped[date] - (refundMap[date] || 0),
@@ -181,6 +208,8 @@ export const dashboardController = {
         select: { id: true, name: true },
       });
 
+      // রিফান্ডেড আইটেমগুলোর প্রভাব বাদ দিতে চাইলে এখানে রিফান্ড কমানো যেতে পারে,
+      // কিন্তু বিক্রি সংখ্যা সাধারণত রিফান্ডে প্রভাবিত হয় না (পণ্য ফেরত না)।
       const data = soldItems.map((item) => {
         const product = products.find((p) => p.id === item.productId);
         return {
@@ -270,8 +299,8 @@ export const dashboardController = {
           orderStatus: { in: ["confirmed", "packed", "delivered"] },
         },
         _count: { id: true },
-        _sum: { subtotal: true },
-        orderBy: { _sum: { subtotal: "desc" } },
+        _sum: { total: true },
+        orderBy: { _sum: { total: "desc" } },
         take: 10,
       });
 
@@ -279,7 +308,7 @@ export const dashboardController = {
         phone: order.orderedByPhone || "Unknown",
         name: order.customerName || "Unknown",
         totalOrders: order._count.id,
-        totalSpent: order._sum.subtotal || 0,
+        totalSpent: order._sum.total || 0,
       }));
 
       res.json({ success: true, data });
@@ -303,14 +332,14 @@ export const dashboardController = {
           createdAt: { gte: start, lte: end },
           orderStatus: { in: ["confirmed", "packed", "delivered"] },
         },
-        select: { createdAt: true, subtotal: true },
+        select: { createdAt: true, total: true },
         orderBy: { createdAt: "asc" },
       });
 
       const grouped: Record<string, number> = {};
       orders.forEach((order) => {
         const date = order.createdAt.toISOString().split("T")[0];
-        grouped[date] = (grouped[date] || 0) + order.subtotal;
+        grouped[date] = (grouped[date] || 0) + order.total;
       });
 
       const data = Object.keys(grouped).map((date) => ({
@@ -346,7 +375,7 @@ export const dashboardController = {
         select: {
           phone: true,
           orders: {
-            select: { subtotal: true },
+            select: { total: true },
           },
         },
       });
@@ -358,10 +387,7 @@ export const dashboardController = {
 
       customers.forEach((customer) => {
         const orderCount = customer.orders.length;
-        const totalSpent = customer.orders.reduce(
-          (sum, o) => sum + o.subtotal,
-          0,
-        );
+        const totalSpent = customer.orders.reduce((sum, o) => sum + o.total, 0);
         if (orderCount <= 1) {
           newCount++;
           newSpent += totalSpent;
@@ -538,7 +564,7 @@ export const dashboardController = {
       const salesProfitData = await prisma.$queryRaw`
         SELECT 
           DATE(o.createdAt) as date,
-          SUM(o.subtotal) as revenue,
+          SUM(o.total) as revenue,
           SUM((s.unitPrice - st.buyingOrMakingPrice) * s.quantity) as profit
         FROM \`orders\` o
         JOIN \`sold_items\` s ON s.orderId = o.id
@@ -585,7 +611,7 @@ export const dashboardController = {
         },
         select: {
           createdAt: true,
-          subtotal: true,
+          total: true,
           isWebsiteOrder: true,
         },
       });
@@ -605,9 +631,9 @@ export const dashboardController = {
           data[key] = { day, slot: slotIndex, website: 0, custom: 0 };
         }
         if (order.isWebsiteOrder) {
-          data[key].website += order.subtotal;
+          data[key].website += order.total;
         } else {
-          data[key].custom += order.subtotal;
+          data[key].custom += order.total;
         }
       });
 
@@ -636,7 +662,10 @@ export const dashboardController = {
     }
   },
 
+  // dashboardController.ts - নতুন মেথড যোগ করুন
+
   // ---------- TOP DEFECT INTENSIVE PRODUCTS ----------
+  // dashboardController.ts - getTopDefectProducts
   async getTopDefectProducts(req: Request, res: Response) {
     try {
       const { startDate, endDate } = req.query;
@@ -645,6 +674,9 @@ export const dashboardController = {
         endDate as string,
       );
 
+      console.log("📅 Date range:", { start, end });
+
+      // প্রথম কুয়েরি: সরাসরি soldItemId দিয়ে
       const result = await prisma.$queryRaw`
       SELECT 
         p.id AS productId,
@@ -662,6 +694,8 @@ export const dashboardController = {
       LIMIT 10
     `;
 
+      console.log("🔍 Query result:", result);
+
       let finalData: any[] = [];
 
       if ((result as any[]).length > 0) {
@@ -678,6 +712,8 @@ export const dashboardController = {
           };
         });
       } else {
+        // দ্বিতীয় কুয়েরি: orderId দিয়ে sold_items জয়েন (যখন soldItemId null)
+        console.log("⚠️ No results from first query, trying alternative...");
         const altResult = await prisma.$queryRaw`
         SELECT 
           p.id AS productId,
@@ -694,6 +730,7 @@ export const dashboardController = {
         ORDER BY refundCount DESC
         LIMIT 10
       `;
+        console.log("🔍 Alternative query result:", altResult);
 
         finalData = (altResult as any[]).map((p) => {
           const refundCount = Number(p.refundCount) || 0;

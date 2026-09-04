@@ -40,6 +40,8 @@ import liveCampaignRoutes from "./routes/admin/liveCampaign";
 import userRoutes from "./routes/admin/user";
 import formulaRoutes from "./routes/admin/formula";
 import publicWebSettingsRoutes from "./routes/public/webSettings";
+import adminWorksheetRoutes from "./routes/admin/worksheet";
+import publicWorksheetRoutes from "./routes/public/worksheet";
 
 // Import middleware
 import { adminAuth } from "./middleware/adminAuth";
@@ -144,6 +146,8 @@ app.use("/api/admin/account", accountRoutes);
 app.use("/api/admin/live-campaign", liveCampaignRoutes);
 app.use("/api/admin/users", userRoutes);
 app.use("/api/admin/formulas", formulaRoutes);
+app.use("/api/admin/worksheets", adminAuth, adminWorksheetRoutes);
+app.use("/api/public", publicWorksheetRoutes);
 
 // Health check
 app.get("/", (req: Request, res: Response) => {

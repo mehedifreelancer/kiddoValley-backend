@@ -293,7 +293,9 @@ model HeroSlider {
   bookTitle        String
   bookSubtitle     String
   sliderDetailsUrl String?
-  bgImage          String
+  bgType           String   @default("image") // 🆕 "image" | "color"
+  bgImage          String? // 🆕 এখন optional (color mode এ null থাকবে)
+  bgColor          String? // 🆕 gradient/solid css string, e.g. "linear-gradient(135deg, #ff0000, #0000ff)"
   innerBigImage    String
   innerTopImage    String
   innerBottomImage String

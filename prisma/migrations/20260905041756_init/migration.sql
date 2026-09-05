@@ -266,7 +266,9 @@ CREATE TABLE `hero_sliders` (
     `bookTitle` VARCHAR(191) NOT NULL,
     `bookSubtitle` VARCHAR(191) NOT NULL,
     `sliderDetailsUrl` VARCHAR(191) NULL,
-    `bgImage` VARCHAR(191) NOT NULL,
+    `bgType` VARCHAR(191) NOT NULL DEFAULT 'image',
+    `bgImage` VARCHAR(191) NULL,
+    `bgColor` VARCHAR(191) NULL,
     `innerBigImage` VARCHAR(191) NOT NULL,
     `innerTopImage` VARCHAR(191) NOT NULL,
     `innerBottomImage` VARCHAR(191) NOT NULL,
@@ -442,6 +444,17 @@ CREATE TABLE `formulas` (
 CREATE TABLE `layout_settings` (
     `id` INTEGER NOT NULL DEFAULT 1,
     `gridClasses` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `worksheets` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `title` VARCHAR(191) NOT NULL,
+    `filePath` VARCHAR(191) NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 

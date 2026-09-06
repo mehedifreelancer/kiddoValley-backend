@@ -22,7 +22,13 @@ async function validateAllVariantsHaveStock(productId: number): Promise<void> {
 }
 
 // ---------- Transform for public API ----------
-function transformProductForPublic(product: any) {
+// 👇 নতুন প্যারামিটার: includeAllVariantImages
+//    - false (ডিফল্ট) => লিস্ট এন্ডপয়েন্টে শুধু প্রথম ছবিটা (imgUrl) থাকবে
+//    - true             => single product (getBySlug) এ পুরো ছবির অ্যারে (imgUrls) থাকবে
+function transformProductForPublic(
+  product: any,
+  includeAllVariantImages = false,
+) {
   const thumbnailImage = product.thumbnail || null;
 
   const variants = (product.variants || []).map((variant: any) => {
@@ -37,18 +43,26 @@ function transformProductForPublic(product: any) {
     if (totalStock > 5) inStock = "in stock";
     else if (totalStock > 0) inStock = "less than 5";
 
-    const firstImage = variant.images?.[0]?.imgUrl || null;
+    // ✅ variant.images (Json array) থেকে সব ছবির URL বের করা হচ্ছে
+    const variantImages: string[] = ((variant.images as any[]) || [])
+      .map((img: any) => img.imgUrl)
+      .filter(Boolean);
 
-    return {
+    const base = {
       id: variant.id,
       sku: variant.sku,
       stockId: firstStock.id || null,
       price: firstStock.sellingPrice || 0,
       discount: firstStock.discountPercent || 0,
       inStock: inStock,
-      imgUrl: firstImage,
+      imgUrl: variantImages[0] || null, // সবসময় প্রথম ছবিটা (ব্যাকওয়ার্ড কম্প্যাটিবল)
       attributes: variant.attributes || {},
     };
+
+    if (includeAllVariantImages) {
+      return { ...base, imgUrls: variantImages }; // 👈 পুরো অ্যারে শুধু detail page এ
+    }
+    return base;
   });
 
   // Aggregated attributes
@@ -132,15 +146,6 @@ export const productController = {
       }
       if (category) where.category = { slug: category };
 
-      // Get sorted IDs: forced items (priority > 0) first in 1,2,3... order,
-      // then everything else by newest first.
-      const allMatching = await prisma.product.findMany({
-        where,
-        select: { id: true },
-      });
-      // fallback if catalog is small — safe for now, see note below
-      void allMatching;
-
       const products = await prisma.product.findMany({
         where,
         include: {
@@ -166,14 +171,16 @@ export const productController = {
           },
         },
         orderBy: [
-          { forceOrderPriority: "desc" }, // higher priority first, 0s sink to bottom
-          { createdAt: "desc" },
+          { isForceOrder: "desc" }, // force order products (true) block আগে থাকবে
+          { forceOrderPriority: "asc" }, // force order block এর ভেতরে 1,2,3... ascending
+          { createdAt: "asc" }, // non-force block এর প্রোডাক্টগুলো পুরনো → নতুন ascending
         ],
       });
 
       const total = products.length;
       const paged = products.slice(skip, skip + limit);
 
+      // 👇 লিস্ট এন্ডপয়েন্ট: includeAllVariantImages দেওয়া হয়নি, তাই শুধু প্রথম ছবিটা
       const transformedData = paged.map((product) =>
         transformProductForPublic(product),
       );
@@ -232,12 +239,12 @@ export const productController = {
         },
       });
       if (!product || !product.isPublished) {
-        // ✅ unpublished হলে 404
         return res
           .status(404)
           .json({ success: false, message: "Product not found" });
       }
-      const transformed = transformProductForPublic(product);
+      // 👇 একমাত্র জায়গা যেখানে true পাস করা হচ্ছে — পুরো ছবির অ্যারে দরকার এখানে
+      const transformed = transformProductForPublic(product, true);
       res.json({ success: true, data: transformed });
     } catch (error: any) {
       console.error("Get product by slug error:", error);
@@ -252,7 +259,7 @@ export const productController = {
     try {
       const products = await prisma.product.findMany({
         where: { isForceOrder: true, isPublished: true },
-        orderBy: { forceOrderPriority: "asc" }, // ✅ 1 আগে, 2 পরে...
+        orderBy: { forceOrderPriority: "asc" },
         include: {
           category: {
             select: {
@@ -276,6 +283,7 @@ export const productController = {
           },
         },
       });
+      // 👇 লিস্ট এন্ডপয়েন্ট: শুধু প্রথম ছবি
       const transformedData = products.map((product) =>
         transformProductForPublic(product),
       );
@@ -318,10 +326,7 @@ export const productController = {
           include: {
             category: { select: { id: true, name: true, slug: true } },
           },
-          orderBy: [
-            { forceOrderPriority: "desc" }, // higher priority first, 0 (non-forced) sinks to bottom
-            { createdAt: "desc" }, // newest first within same priority
-          ],
+          orderBy: [{ forceOrderPriority: "desc" }, { createdAt: "desc" }],
         }),
         prisma.product.count({ where }),
       ]);
@@ -561,7 +566,6 @@ export const productController = {
         "slug",
         "videoUrl",
         "description",
-        "isForceOrder",
         "forceOrderPriority",
         "categoryId",
         "attributePriority",
@@ -596,8 +600,8 @@ export const productController = {
 
       if (updateData.forceOrderPriority !== undefined) {
         updateData.forceOrderPriority = parseInt(updateData.forceOrderPriority);
+        updateData.isForceOrder = updateData.forceOrderPriority > 0; // সবসময় সিঙ্ক থাকবে
       }
-
       if (updateData.weight !== undefined) {
         updateData.weight = parseFloat(updateData.weight) || null;
       }
@@ -814,10 +818,8 @@ export const productController = {
 
       const variantIds = product.variants.map((v) => v.id);
 
-      // ---- ধাপ ১: আগে সব DB রেকর্ড ডিলিট (transaction, atomic) ----
       await prisma.$transaction(async (tx) => {
         if (variantIds.length) {
-          // ✅ sold items এর stockId খুলে দিন — বিক্রির ইতিহাস (snapshot) অক্ষত থাকবে
           await tx.soldItem.updateMany({
             where: { stock: { variantId: { in: variantIds } } },
             data: { stockId: null },
@@ -830,8 +832,6 @@ export const productController = {
             where: { variantId: { in: variantIds } },
           });
 
-          // যদি cart/wishlist/review ইত্যাদি থাকে, এখানে যোগ করুন
-
           await tx.variant.deleteMany({
             where: { productId: id },
           });
@@ -841,9 +841,6 @@ export const productController = {
         await tx.product.delete({ where: { id } });
       });
 
-      // ---- ধাপ ২: DB delete সফল হলেই শুধু disk থেকে images মুছুন ----
-
-      // ✅ Thumbnail মুছুন
       if (product.thumbnail) {
         const filename = product.thumbnail.split("/").pop();
         if (filename) {
@@ -860,7 +857,6 @@ export const productController = {
         }
       }
 
-      // ✅ প্রতিটি variant-এর সব images মুছুন
       for (const variant of product.variants) {
         const images = (variant.images as any[]) || [];
         for (const img of images) {
@@ -1123,6 +1119,7 @@ export const productController = {
         orderBy: { createdAt: "desc" },
       });
 
+      // 👇 লিস্ট (রিলেটেড প্রোডাক্ট কার্ড): শুধু প্রথম ছবিটা
       const transformed = relatedProducts.map((p) =>
         transformProductForPublic(p),
       );
@@ -1154,7 +1151,6 @@ export const productController = {
 
       const newStatus = !product.isPublished;
 
-      // Only enforce the "every variant needs a price set" rule when publishing
       if (newStatus) {
         await validateAllVariantsHaveStock(id);
       }

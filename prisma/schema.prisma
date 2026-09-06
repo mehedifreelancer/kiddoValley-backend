@@ -52,7 +52,7 @@ model Product {
   slug               String   @unique
   categoryId         Int
   category           Category @relation(fields: [categoryId], references: [id])
-  description        String?
+  description        String?  @db.Text
   videoUrl           String?
   thumbnail          String?
   isForceOrder       Boolean  @default(false)
